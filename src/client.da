@@ -1,0 +1,13 @@
+import sys
+
+
+class Client(process):
+
+    def setup(validators: list):  # have to create message class
+        self.exit_flag = 0
+        pass
+
+    def run():
+        for validator in validators:
+            send(('Yo ', ), to=validator)
+        await(exit_flag == 1)
