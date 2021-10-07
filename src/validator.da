@@ -1,0 +1,25 @@
+import sys
+
+
+class Validator(process):
+
+    def setup(id: int):
+        self.exit_flag = 0
+        pass
+
+    def run():
+        await(exit_flag == 1)
+
+    def receive(msg=(action,), from_=p):
+        if action == 'Request':
+            output('Request')
+        elif action == 'Local Timeout':
+            output('Local Timeout')
+        elif action == 'Propose':
+            output('Propose')
+        elif action == 'Vote':
+            output('Vote')
+        elif action == 'Timeout':
+            output('Timeout')
+        else:
+            output('Default')
