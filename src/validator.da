@@ -1,13 +1,26 @@
 import sys
 
+from leader_election import LeaderElection
+from ledger import Ledger
+from pacemaker import PaceMaker
+
 
 class Validator(process):
 
-    def setup(id: int):
+    def setup(id: int, validators: list):
         self.exit_flag = 0
-        pass
-
+        self.validators = validators
+        self.modules_map = {}                       # A dictionary which stores all the modules' references
+        self.modules_map['validators_list'] = validators
+        self.ledger = Ledger(self.modules_map)
+        self.pace_maker = PaceMaker(self.modules_map)
+        self.leader_election = LeaderElection(self.modules_map, 5, 2)
+        self.modules_map['ledger'] = self.ledger
+        self.modules_map['pace_maker'] = self.pace_maker
+        self.modules_map['leader_election'] = self.leader_election
+        
     def run():
+        output(self.leader_election.get_leader(1))  # Testing leader_election get_leader functionality
         await(exit_flag == 1)
 
     def receive(msg=(action,), from_=p):

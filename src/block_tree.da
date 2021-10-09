@@ -1,0 +1,40 @@
+
+
+class BlockTree:
+    def __init__(self, pending_block_tree, pending_votes, high_qc, high_commit_qc) -> None:
+        self.pending_block_tree = pending_block_tree
+        self.pending_votes = pending_votes
+        self.high_qc = high_qc
+        self.high_commit_qc = high_commit_qc
+
+    def process_qc(self, QC):
+        pass
+
+    def execute_and_insert(self, QC):
+        pass
+
+    def process_vote(self, v):
+        pass
+
+    def generate_block(self, txns, current_round):
+        pass
+
+class Block:
+    def __init__(self) -> None:
+        pass
+
+class LedgerCommitInfo:
+    def __init__(self) -> None:
+        pass
+
+class VoteMsg:
+    def __init__(self) -> None:
+        pass
+
+class QC:
+    def __init__(self) -> None:
+        pass
+
+class Block:
+    def __init__(self) -> None:
+        pass
