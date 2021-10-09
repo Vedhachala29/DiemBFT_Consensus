@@ -11,7 +11,7 @@ class Run(process):
         validators = new(Validator, num=config['nreplicas'])
         validators = list(validators)
         for i, validator in enumerate(validators):
-            setup(validator, (i+1,))  # setup validators with id [1 to n]
+            setup(validator, (i+1, validators))  # setup validators with id [1 to n]
             start(validator)
 
         clients = new(Client, num=config['nclients'])

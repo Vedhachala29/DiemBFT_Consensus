@@ -1,0 +1,5 @@
+import sys
+
+class PaceMaker:
+    def __init__(self, modules_map):
+        self.modules_map = modules_map
