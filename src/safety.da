@@ -1,0 +1,45 @@
+class Safety:
+    def __init__(self, modules_map, private_key, public_keys, highest_qc_round, highest_vote_round=0):
+        self.modules_map = modules_map  # map of all the modules of the validator
+        self.private_key = private_key  # own private key of the validator
+        self.public_keys = public_keys  # public keys of all the validators
+        self.highest_qc_round = highest_qc_round
+        self.highest_vote_round = highest_vote_round
+
+    def increase_highest_vote_round(self, round):
+        #commit not to vote in rounds lower than round
+        self.highest_vote_round = max(round, self.highest_vote_round)
+
+    def update_highest_qc_round(self, qc_round):
+        self.highest_qc_round = max(qc_round, self.highest_qc_round)
+
+    def consecutive(self, block_round, round):
+        return round + 1 == block_round
+
+    def safe_to_extend(self, block_round, qc_round, tc):
+        # TODO align the code after deciding tc structure
+        return self.consecutive(block_round, tc.round) and (qc_round >= max(tc.tmo_high_qc_rounds))
+
+    def safe_to_vote(self, block_round, qc_round, tc):
+        if block_round <= max(self.highest_vote_round, qc_round):
+            # 1. must vote in monotonically increasing rounds
+            # 2. must extend a smaller round
+            return False
+
+        # Extending qc from previous round or safe to extend due to tc
+        return self.consecutive(block_round, qc_round) or self.safe_to_extend(block_round, qc_round, tc)
+
+    def safe_to_timeout(self, round, qc_round, tc):
+        if (qc_round < self.highest_qc_round) or (round <= max(self.highest_vote_round-1, qc_round)):
+            # respect highest qc round and don’t timeout in a past round
+            return False
+
+        # qc or tc must allow entering the round to timeout
+        return self.consecutive(round, qc_round) or self.consecutive(round, tc.round)
+
+    def commit_state_id_candidate(self, block_round, qc):
+        # find the committed id in case a qc is formed in the vote round
+        if self.consecutive(block_round, qc.vote_info.round):
+            return self.modules_map['ledger'].pending_state(qc.id)  # TODO qc structure and align with it 
+        else:
+            return '⊥'  #TODO check this symbol

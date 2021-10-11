@@ -1,5 +1,19 @@
 import sys
 
+
 class PaceMaker:
-    def __init__(self, modules_map):
+    def __init__(self, modules_map, delta):
         self.modules_map = modules_map
+        self.delta = delta
+        self.current_round = 0
+        self.last_round_tc = None
+        self.pending_timeouts = 3  #TODO value?
+
+    def get_round_timer(self, r:int):
+        return 4 * self.delta  #TODO case for unknown delta
+
+    def start_timer(self, new_round):
+        pass
+
+    def local_timeout_round(self):
+        pass
