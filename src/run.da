@@ -1,7 +1,7 @@
 import sys
 from validator import Validator
 from client import Client
-
+import util
 
 class Run(process):
 
@@ -10,8 +10,10 @@ class Run(process):
     def run():
         validators = new(Validator, num=config['nreplicas'])
         validators = list(validators)
+        signing_key_objects = util.get_signing_key_objects(config['nreplicas'])
+        public_keys = {i: obj.verify_key.encode() for i,obj in enumerate(signing_key_objects)}
         for i, validator in enumerate(validators):
-            setup(validator, (i+1, validators))  # setup validators with id [1 to n]
+            setup(validator, (i+1, validators, public_keys, signing_key_objects[i]))  # setup validators with id [1 to n]
             start(validator)
 
         clients = new(Client, num=config['nclients'])

@@ -3,17 +3,18 @@ import sys
 from leader_election import LeaderElection
 from ledger import Ledger
 from pacemaker import PaceMaker
+from safety import Safety
 
 
 class Validator(process):
 
-    def setup(id: int, validators: list):
+    def setup(id: int, validators: list, public_keys: list, private_key):
         self.exit_flag = 0
         self.validators = validators
         self.modules_map = {}                       # A dictionary which stores all the modules' references
         self.modules_map['validators_list'] = validators
         self.ledger = Ledger(self.modules_map)
-        self.pace_maker = PaceMaker(self.modules_map)
+        self.pace_maker = PaceMaker(self.modules_map,1) # TODO delta, 1 is a place holder
         self.leader_election = LeaderElection(self.modules_map, 5, 2)
         self.modules_map['ledger'] = self.ledger
         self.modules_map['pace_maker'] = self.pace_maker
