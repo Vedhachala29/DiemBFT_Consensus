@@ -1,45 +1,84 @@
+import nacl.encoding
+import nacl.hash
+from nacl.bindings.utils import sodium_memcmp
+
+
 class Safety:
     def __init__(self, modules_map, private_key, public_keys, highest_qc_round, highest_vote_round=0):
         self.modules_map = modules_map  # map of all the modules of the validator
-        self.private_key = private_key  # own private key of the validator
-        self.public_keys = public_keys  # public keys of all the validators
-        self.highest_qc_round = highest_qc_round
-        self.highest_vote_round = highest_vote_round
+        self.__private_key = private_key  # own private key of the validator
+        self.__public_keys = public_keys  # public keys of all the validators
+        self.__highest_qc_round = highest_qc_round
+        self.__highest_vote_round = highest_vote_round
+        self.hasher = nacl.hash.sha256
 
-    def increase_highest_vote_round(self, round):
-        #commit not to vote in rounds lower than round
-        self.highest_vote_round = max(round, self.highest_vote_round)
+    def __increase_highest_vote_round(self, round):
+        # commit not to vote in rounds lower than round
+        self.__highest_vote_round = max(round, self.__highest_vote_round)
 
-    def update_highest_qc_round(self, qc_round):
-        self.highest_qc_round = max(qc_round, self.highest_qc_round)
+    def __update_highest_qc_round(self, qc_round):
+        self.__highest_qc_round = max(qc_round, self.__highest_qc_round)
 
-    def consecutive(self, block_round, round):
+    def __consecutive(self, block_round, round):
         return round + 1 == block_round
 
-    def safe_to_extend(self, block_round, qc_round, tc):
+    def __safe_to_extend(self, block_round, qc_round, tc):
         # TODO align the code after deciding tc structure
-        return self.consecutive(block_round, tc.round) and (qc_round >= max(tc.tmo_high_qc_rounds))
+        return self.__consecutive(block_round, tc.round) and (qc_round >= max(tc.tmo_high_qc_rounds))
 
-    def safe_to_vote(self, block_round, qc_round, tc):
-        if block_round <= max(self.highest_vote_round, qc_round):
+    def __safe_to_vote(self, block_round, qc_round, tc):
+        if block_round <= max(self.__highest_vote_round, qc_round):
             # 1. must vote in monotonically increasing rounds
             # 2. must extend a smaller round
             return False
 
         # Extending qc from previous round or safe to extend due to tc
-        return self.consecutive(block_round, qc_round) or self.safe_to_extend(block_round, qc_round, tc)
+        return self.__consecutive(block_round, qc_round) or self.__safe_to_extend(block_round, qc_round, tc)
 
-    def safe_to_timeout(self, round, qc_round, tc):
-        if (qc_round < self.highest_qc_round) or (round <= max(self.highest_vote_round-1, qc_round)):
+    def __safe_to_timeout(self, round, qc_round, tc):
+        if (qc_round < self.__highest_qc_round) or (round <= max(self.__highest_vote_round-1, qc_round)):
             # respect highest qc round and don’t timeout in a past round
             return False
 
         # qc or tc must allow entering the round to timeout
-        return self.consecutive(round, qc_round) or self.consecutive(round, tc.round)
+        return self.__consecutive(round, qc_round) or self.__consecutive(round, tc.round)
 
-    def commit_state_id_candidate(self, block_round, qc):
+    def __commit_state_id_candidate(self, block_round, qc):
         # find the committed id in case a qc is formed in the vote round
-        if self.consecutive(block_round, qc.vote_info.round):
+        if self.__consecutive(block_round, qc.vote_info.round):
             return self.modules_map['ledger'].pending_state(qc.id)  # TODO qc structure and align with it 
         else:
             return '⊥'  #TODO check this symbol
+
+    def encode_message(self, msg):
+        encoded_msg_obj = {
+            'digest': self.hasher(msg, encoder=nacl.encoding.HexEncoder),
+            'encoded_msg': nacl.encoding.HexEncoder.encode(msg)
+        }
+        return encoded_msg_obj
+
+    def validate_message_integrity(self, msg_obj):
+        msg = nacl.encoding.HexEncoder.decode(msg_obj)['encoded_msg']
+        dgst = self.hasher(msg, encoder=nacl.encoding.HexEncoder)
+        return sodium_memcmp(dgst, msg_obj['digest'])
+
+    def valid_signatures(self, block, tc):
+        return True  # TODO
+
+    def make_vote(self, b, last_tc):
+        qc_round = b.qc.vote_info.round
+        if self.valid_signatures(b, last_tc) and self.__safe_to_vote(b.round, qc_round, last_tc):
+            self.__update_highest_qc_round(qc_round)  # Protect qc round
+            self.__increase_highest_vote_round(b.round) # Don’t vote again in this (or lower) round
+            # VoteInfo carries the potential QC info with ids and rounds of the parent QC
+            vote_info = VoteInfo()  # TODO
+            ledger_commit_info = LedgerCommitInfo()  # TODO
+            return VoteMsg(vote_info, ledger_commit_info, self.modules_map['block_tree'].high_commit_qc)  # TODO
+        return "⊥" 
+
+    def make_timeout(self, round, high_qc, last_tc):
+        qc_round = high_qc.vote_info.round
+        if self.valid_signatures(high_qc, last_tc) and self.__safe_to_timeout(round, qc_round, last_tc):
+            self.__increase_highest_vote_round(round)  # Stop voting for round
+            return TimeoutInfo(round, high_qc)  # TODO
+        return "⊥"  # TODO
