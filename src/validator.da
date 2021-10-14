@@ -4,6 +4,8 @@ from leader_election import LeaderElection
 from ledger import Ledger
 from pacemaker import PaceMaker
 from safety import Safety
+from block_tree import BlockTree
+from messages import TimeOutMsg
 
 
 class Validator(process):
@@ -11,29 +13,49 @@ class Validator(process):
     def setup(id: int, validators: list, public_keys: list, private_key):
         self.exit_flag = 0
         self.validators = validators
-        self.modules_map = {}                       # A dictionary which stores all the modules' references
+        self.modules_map = {}                            # A dictionary which stores all the modules' references
         self.modules_map['validators_list'] = validators
         self.ledger = Ledger(self.modules_map)
-        self.pace_maker = PaceMaker(self.modules_map,1) # TODO delta, 1 is a place holder
+        self.pace_maker = PaceMaker(self.modules_map,1)  # TODO delta, 1 is a place holder
+        self.pace_maker_timer = 4
         self.leader_election = LeaderElection(self.modules_map, 5, 2)
+        self.safety = Safety(self.modules_map, private_key, public_keys, 0, 0) # TODO Check this initialization
+        self.block_tree = BlockTree(self.modules_map)
         self.modules_map['ledger'] = self.ledger
         self.modules_map['pace_maker'] = self.pace_maker
         self.modules_map['leader_election'] = self.leader_election
+        self.modules_map['safety'] = self.safety
+        self.modules_map['block_tree'] = self.block_tree
         
     def run():
-        output(self.leader_election.get_leader(1))  # Testing leader_election get_leader functionality
-        await(exit_flag == 1)
+        output(self.leader_election.get_leader(1))
+        
+        while not self.exit_flag:
+            self.round_done = False
+            timer_duration = self.pace_maker.get_round_timer(10000)
+            if await(self.round_done):
+                output("Round " + self.pace_maker.current_round + " is done after awaiting")
+            elif timeout(timer_duration):
+                timeout_info = self.safety.make_timeout(self.pace_maker.current_round, self.block_tree.high_qc,
+                                                        self.pace_maker.last_round_tc)
+                
+                timeout_msg  = TimeOutMsg(timeout_info, self.pace_maker.last_round_tc, self.block_tree.high_commit_qc)
+                send(('Timeout', timeout_msg), to=self.validators)
 
-    def receive(msg=(action,), from_=p):
+        await(self.exit_flag == 1)
+
+    def receive(msg=(action, msg), from_=p):
         if action == 'Request':
-            output('Request')
+            output('Request', msg)
         elif action == 'Local Timeout':
-            output('Local Timeout')
+            output('Local Timeout', msg)
         elif action == 'Propose':
-            output('Propose')
+            output('Propose', msg)
         elif action == 'Vote':
-            output('Vote')
+            output('Vote', msg)
         elif action == 'Timeout':
-            output('Timeout')
+            output('Timeout', msg)
         else:
-            output('Default')
+            output('Default', msg)
+    
+
