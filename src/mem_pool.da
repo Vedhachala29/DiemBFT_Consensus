@@ -1,0 +1,15 @@
+from collections import deque
+
+
+class MemPool:
+    def __init__(self) -> None:
+        self.queue = deque()
+
+    def add_command_to_queue(self, client_command):
+        self.queue.append(client_command)
+
+    def get_next_command(self):
+        if self.queue:
+            return self.queue.pop()
+
+        return None
