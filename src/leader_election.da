@@ -36,7 +36,7 @@ class LeaderElection:
 
     def get_leader(self, round:int):
         if round in self.reputation_leaders:
-            return self.reputation_leaders[round]
+            return self.reputation_leaders[round] # check what is returned
         else:
-            return self.validators[math.floor(round/2) % len(self.validators)]
+            return math.floor(round/2) % len(self.validators)
     

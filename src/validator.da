@@ -4,6 +4,9 @@ from leader_election import LeaderElection
 from ledger import Ledger
 from pacemaker import PaceMaker
 from block_tree import BlockTree
+from messages import TimeOutMsg, TimeoutInfo, TC, ProposalMsg
+from mem_pool import MemPool
+from safety import Safety
 
 
 class Validator(process):
@@ -11,17 +14,15 @@ class Validator(process):
     def setup(id: int, validators: list, public_keys: list, private_key):
         self.exit_flag = 0
         self.validators = validators
-        self.modules = {}                    # A dictionary which stores all the modules' references
-        self.modules.config = {
-            "id": id,
-            "nfaulty": 0
-        }
-        self.pace_maker = PaceMaker(self.modules,1)  # TODO delta, 1 is a place holder
+        self.modules = {}                  # A dictionary which stores all the modules' references  # delta, 1 is a place holder
+        self.modules["config"] = {}
+        self.modules["config"]["id"] = id
+        self.modules["config"]["nfaulty"] = 0
         self.pace_maker_timer = 4
-        self.leader_election = LeaderElection(self.modules, 5, 2)
-        self.safety = Safety(self.modules, private_key, public_keys, 0, 0) # TODO Check this initialization
+        self.modules['validators_list'] = self.validators 
+        self.safety = Safety(self.modules, private_key, public_keys, -1, -1) # TODO Check this initialization
         self.block_tree = BlockTree(modules)
-        self.modules['validators_list'] = validators
+        self.mem_pool = MemPool()
         self.ledger = Ledger(self.modules)
         self.pace_maker = PaceMaker(self.modules)
         self.leader_election = LeaderElection(self.modules, 5, 2)
@@ -30,73 +31,105 @@ class Validator(process):
         self.modules['block_tree'] = self.block_tree
         self.modules['leader_election'] = self.leader_election
         self.modules['safety'] = self.safety
+        self.modules['mem_pool'] = self.mem_pool
+        self.is_leader =  True if id == 0 else False
+        self.sysinit = True
         
     def run():
-        output(self.leader_election.get_leader(1))
-        
-        while not self.exit_flag:
-            self.round_done = False
-            timer_duration = self.pace_maker.get_round_timer(10000)
-            if await(self.round_done):
-                output("Round " + self.pace_maker.current_round + " is done after awaiting")
-            elif timeout(timer_duration):
-                timeout_info = self.safety.make_timeout(self.pace_maker.current_round, self.block_tree.high_qc,
-                                                        self.pace_maker.last_round_tc)
+        output('in run')
+        # while not self.exit_flag:
+        #     self.round_done = False
+        #     timer_duration = self.pace_maker.get_round_timer(10000)
+        #     if await(self.round_done):
+        #         output("Round " + self.pace_maker.current_round + " is done after awaiting")
+        #     elif timeout(timer_duration):
+        #         timeout_info = self.safety.make_timeout(self.pace_maker.current_round, self.block_tree.high_qc,
+        #                                                 self.pace_maker.last_round_tc)
                 
-                timeout_msg  = TimeOutMsg(timeout_info, self.pace_maker.last_round_tc, self.modules.block_tree.high_commit_qc)
-                send(('Timeout', timeout_msg), to=self.validators)
+        #         timeout_msg  = TimeOutMsg(timeout_info, self.pace_maker.last_round_tc, self.modules["block_tree"].high_commit_qc)
+        #         send(('Timeout', timeout_msg), to=self.validators)
 
+        # self.process_new_round_event(None)
+        # while True:
+        #     if  (not self.mem_pool.is_empty()) and self.pace_maker.current_round == 0:
+        #         self.process_new_round_event()
         await(self.exit_flag == 1)
 
     def receive(msg=(action, msg), from_=p):
-        if action == 'Request':
-            output('Request', msg)
-        elif action == 'Local Timeout':
+        if action == 'Local Timeout':
             output('Local Timeout', msg)
         elif action == 'Propose':
-            process_proposal_message(b)
-        elif action == 'Vote':
-            output('Vote', msg)
+            # output(msg, p, action, self.modules["config"]["id"])
+            self.process_proposal_message(msg)
+        elif action == 'vote_message':
+            output('rre vote')
+            self.process_vote_message(msg)
         elif action == 'Timeout':
             output('Timeout', msg)
+        elif action == 'Client':
+            output("from client",p,msg)
+            self.mem_pool.add_command_to_queue(msg)
+            if self.sysinit:
+                self.sysinit = False
+                self.process_new_round_event(None)
+
         else:
             output('Default')
 
+
     def process_certificate_qc(qc):
-        modules.block_tree
-    
+        self.block_tree.process_qc(qc)
+        # self.modules["leader_election"].update_leaders(qc)
+        self.pace_maker.advance_round_qc(qc)
+
     def process_proposal_message(P):
-        process_certficate_qc(P.block.qc)
-        process_certificate_qc(P)
-        process_certifcate_qc(P.high_commit_qc)
-        self.modules.pace_maker.advance_round_tc(P.last_round_tc)
-        round = self.modules.pace_maker.current_round
-        leader = self.modules.pace_maker.get_leader(round)
-        if P.block.round == round or P.sender != leader or P.block.author != leader:
+        self.process_certificate_qc(P.block.qc)
+        self.process_certificate_qc(P.high_commit_qc)
+        self.pace_maker.advance_round_tc(P.last_round_tc)
+        round = self.modules["pace_maker"].current_round
+        leader = self.modules["leader_election"].get_leader(round)
+        
+        if P.block.round != round or P.sender != leader or P.block.author != leader:
             output("No Progress")
             return
-        self.modules.block_tree.execute_and_insert(P)
-        vote_msg = self.modules.safety.make_vote(P.block, P.last_round_tc)
+        
+        self.modules["block_tree"].execute_and_insert(P)
+        vote_msg = self.modules["safety"].make_vote(P.block, P.last_round_tc)
+        # output('after makeout ',self.modules["config"]["id"], self.obj_to_string(vote_msg))
         if vote_msg != None:
-            send(('vote_message', ), to=self.validators[leader])
+            send(('vote_message', vote_msg), to=self.validators[leader])
 
-    def process_timout_message(M):
-        process_certficate_qc(M.tmo_info.high_qc)
-        process_certficate_qc(M.high_commit_qc)
-        self.modules.pace_maker.advance_round_tc(M.last_round_tc)
-        tc = self.modules.pace_maker.process_remote_timeout(M)
+    def process_timeout_message(M):
+        self.process_certficate_qc(M.tmo_info.high_qc)
+        self.process_certficate_qc(M.high_commit_qc)
+        self.modules["pace_maker"].advance_round_tc(M.last_round_tc)
+        tc = self.modules["pace_maker"].process_remote_timeout(M)
         if tc != None:
-            self.modules.pace_maker.advance_round(tc)
+            self.modules["pace_maker"].advance_round(tc)
             self.process_new_round_event(None)
+
     def process_vote_message(vote_msg):
-        qc = self.modules.block_tree.process_vote(vote_msg)
+        qc = self.modules["block_tree"].process_vote(vote_msg)
+        output('qc :  ',self.modules["config"]["id"],  self.obj_to_string(qc))
         if qc != None:
-            self.process_certifciate_qc(qc)
-            process_new_round_event(None)
+            self.process_certificate_qc(qc)
+            # output('btree :  ',self.modules["config"]["id"],  self.obj_to_string(self.modules["block_tree"].high_qc))
+            self.process_new_round_event(None)
     
-    def process_new_round_event(last_tc):
-        if self.modules.config.id == self.modules.leader_election.get_leader(self.modules.pace_maker.current_round):
-            b = self.modules.block_tree.generate_block(self.modules.mempool.get_transaction(), self.modules.pace_maker.current_round)
-            for validator in self.modules.validators:
-                send(('Propose',), to=validator)
+    def process_new_round_event(last_tc:None):
+        output('module', self.modules["leader_election"].get_leader(self.modules["pace_maker"].current_round), self.modules["config"]["id"])
+        if self.modules["config"]["id"] == self.modules["leader_election"].get_leader(self.modules["pace_maker"].current_round):
+            block = self.modules["block_tree"].generate_block(self.modules["config"], self.mem_pool.get_transaction(), self.modules["pace_maker"].current_round)
+            proposal_msg = ProposalMsg(block, last_tc, self.block_tree.high_commit_qc,self.modules["config"]["id"], None)
+            send(('Propose', proposal_msg), to=self.validators)
+        else :
+            output("I am not a leader", self.modules["config"]["id"])
+
+    def obj_to_string(obj, extra='    '):
+        return str(obj.__class__) + '\n' + '\n'.join(
+            (extra + (str(item) + ' = ' +
+                    (obj_to_string(obj.__dict__[item], extra + '    ') if hasattr(obj.__dict__[item], '__dict__') else str(
+                          obj.__dict__[item])))
+            for item in sorted(obj.__dict__)))
+
 

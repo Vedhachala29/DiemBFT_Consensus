@@ -1,10 +1,16 @@
 import nacl.encoding
 import nacl.hash
 from nacl.bindings.utils import sodium_memcmp
+from block_tree import Vote_Info, VoteMsg, LedgerCommitInfo
 
-
+def obj_to_string(obj, extra='    '):
+    return str(obj.__class__) + '\n' + '\n'.join(
+        (extra + (str(item) + ' = ' +
+                  (obj_to_string(obj.__dict__[item], extra + '    ') if hasattr(obj.__dict__[item], '__dict__') else str(
+                      obj.__dict__[item])))
+         for item in sorted(obj.__dict__)))
 class Safety:
-    def __init__(self, modules_map, private_key, public_keys, highest_qc_round, highest_vote_round=0):
+    def __init__(self, modules_map, private_key, public_keys, highest_qc_round, highest_vote_round):
         self.modules_map = modules_map  # map of all the modules of the validator
         self.__private_key = private_key  # own private key of the validator
         self.__public_keys = public_keys  # public keys of all the validators
@@ -45,10 +51,11 @@ class Safety:
 
     def __commit_state_id_candidate(self, block_round, qc):
         # find the committed id in case a qc is formed in the vote round
-        if self.__consecutive(block_round, qc.vote_info.round):
-            return self.modules_map['ledger'].pending_state(qc.id)  # TODO qc structure and align with it 
+        if self.__consecutive(block_round, qc.vote_info.round) and qc.vote_info.round >= 0:
+            print('cs cand id ', self.modules_map['config']['id'], obj_to_string(qc))
+            # return self.modules_map['ledger'].pending_state(qc.id)  # TODO qc structure and align with it 
         else:
-            return '⊥'  #TODO check this symbol
+            return None  #TODO check this symbol
 
     def encode_message(self, msg):
         encoded_msg_obj = {
@@ -67,14 +74,18 @@ class Safety:
 
     def make_vote(self, b, last_tc):
         qc_round = b.qc.vote_info.round
+        #print("in makeout", qc_round)
         if self.valid_signatures(b, last_tc) and self.__safe_to_vote(b.round, qc_round, last_tc):
             self.__update_highest_qc_round(qc_round)  # Protect qc round
+            #print("in makeout voteinfo for loop")
             self.__increase_highest_vote_round(b.round) # Don’t vote again in this (or lower) round
             # VoteInfo carries the potential QC info with ids and rounds of the parent QC
-            vote_info = VoteInfo()  # TODO
-            ledger_commit_info = LedgerCommitInfo()  # TODO
-            return VoteMsg(vote_info, ledger_commit_info, self.modules_map['block_tree'].high_commit_qc)  # TODO
-        return "⊥" 
+            vote_info = Vote_Info(b.id, b.round, None if not(b.qc) else b.qc.vote_info.id, qc_round)
+            #print("in makeout voteinfo", obj_to_string(vote_info))
+            ledger_commit_info = LedgerCommitInfo(self.__commit_state_id_candidate(b.round, b.qc))  # TODO
+            #print("in makeout lcinfo", obj_to_string(vote_info))
+            return VoteMsg(vote_info, ledger_commit_info, self.modules_map['block_tree'].high_commit_qc,self.modules_map['config']["id"], None )  # TODO
+        return None 
 
     def make_timeout(self, round, high_qc, last_tc):
         qc_round = high_qc.vote_info.round
