@@ -8,7 +8,10 @@ class MemPool:
     def add_command_to_queue(self, client_command):
         self.queue.append(client_command)
 
-    def get_next_command(self):
+    def is_empty(self):
+        return len(self.queue) == 0
+
+    def get_transaction(self):
         if self.queue:
             return self.queue.pop()
 

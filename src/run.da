@@ -13,7 +13,7 @@ class Run(process):
         signing_key_objects = util.get_signing_key_objects(config['nreplicas'])
         public_keys = {i: obj.verify_key.encode() for i,obj in enumerate(signing_key_objects)}
         for i, validator in enumerate(validators):
-            setup(validator, (i+1, validators, public_keys, signing_key_objects[i]))  # setup validators with id [1 to n]
+            setup(validator, (i, validators, public_keys, signing_key_objects[i]))  # setup validators with id [1 to n]
             start(validator)
 
         clients = new(Client, num=config['nclients'])
@@ -27,7 +27,7 @@ def main():
     config(clock="Lamport", channel="fifo")
 
     nclients = int(sys.argv[1]) if len(sys.argv) > 1 else 1
-    nreplicas = int(sys.argv[2]) if len(sys.argv) > 2 else 4
+    nreplicas = int(sys.argv[2]) if len(sys.argv) > 2 else 2
     nfaulty = int(sys.argv[3]) if len(sys.argv) > 3 else 1
     seed = int(sys.argv[4]) if len(sys.argv) > 4 else 10
     timeout = int(sys.argv[5]) if len(sys.argv) > 5 else 600

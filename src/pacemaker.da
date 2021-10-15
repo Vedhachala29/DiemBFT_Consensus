@@ -2,9 +2,9 @@ import sys
 
 
 class PaceMaker:
-    def __init__(self, modules_map, delta):
+    def __init__(self, modules_map):
         self.modules_map = modules_map
-        self.delta = delta
+        self.delta = 100
         self.current_round = 0
         self.last_round_tc = None
         self.pending_timeouts = []                  #TODO value?
@@ -33,8 +33,10 @@ class PaceMaker:
         return True
 
     def advance_round_qc(self, qc) :
-        if qc.vote_info.round < self.current_round:
+        # print('in pace maker', qc.vote_info.round)
+        if qc == None or qc.vote_info.round < self.current_round:
             return False
+        
         self.last_round_tc = None
         self.start_timer(qc.vote_info.round + 1)    #Uncomment later when you are testing with timeouts
         return True

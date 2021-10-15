@@ -8,6 +8,5 @@ class Client(process):
         pass
 
     def run():
-        for validator in validators:
-            send(('Yo ', ), to=validator)
+        send(('Client', "transactions"), to=self.validators)
         await(exit_flag == 1)

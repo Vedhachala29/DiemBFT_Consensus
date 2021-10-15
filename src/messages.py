@@ -19,8 +19,9 @@ class TC:
         self.tmo_signatures = tmo_signatures
 
 class ProposalMsg:
-    def __init__(self, block, last_round_tc, high_commit_qc, signature) -> None:
+    def __init__(self, block, last_round_tc, high_commit_qc, sender, signature:None) -> None:
         self.block = block
         self.last_round_tc = last_round_tc
         self.high_commit_qc = high_commit_qc
+        self.sender = sender
         self.signature = signature
