@@ -1,41 +1,70 @@
-
-
 class BlockTree:
     def __init__(self, modules) -> None:
+        self.pending_block_tree = None
+        self.pending_votes = {}
+        self.high_qc = None
+        self.high_commit_qc = None
         self.modules = modules
-        # self.pending_block_tree = pending_block_tree
-        # self.pending_votes = pending_votes
-        # self.high_qc = high_qc
-        # self.high_commit_qc = high_commit_qc
+        self.root = Block(-1, 0, None, None) # genesis Block
+        self.root.child = self.pending_block_tree
 
-    def process_qc(self, QC):
-        pass
+    def __prune__(self, id):
+        self.pending_block_tree = None
+    def __add__(self,block):
+        if(self.pending_block_tree != None):
+            self.pending_block_tree.child = block
+        else:
+            self.pending_block_tree = block
 
-    def execute_and_insert(self, QC):
-        pass
+    def process_qc(self, qc):
+        if qc.ledger_commit_info.commit_state_id != None:
+            self.modules.Ledger.commit(qc.vote_info.parent_id)
+            self.__prune__(qc.vote_info.parent_id)
+            self.high_commit_qc = max(qc.vote_info.id, self.high_commit_qc)
+        self.high_qc = max(qc, self.high_qc)
 
-    def process_vote(self, v):
-        pass
+    def execute_and_insert(self, b):
+        self.modules.Ledger.speculate(b.qc.block_id, b.id, b.payload)
+        self.__add__(b)
+
+    def process_vote(self, vote):
+        self.process_qc(vote.high_commit_qc)
+        vote_idx = hash(vote.ledger_commit_info)
+        self.pending_votes[vote_idx] = self.pending_votes[vote_idx] + vote.signature
+        if self.pending_votes[vote_idx] == 2*(modules.config.nfaulty)+1:
+            qc = QC(vote.vote_info, vote.state_id, self.pending_votes[vote_idx])
+            return qc
+        return None
 
     def generate_block(self, txns, current_round):
-        pass
+        return Block(self.config)
 
 class Block:
-    def __init__(self) -> None:
-        pass
+    def __init__(self, author, round, payload, qc) -> None:
+        self.author = author
+        self.round = round
+        self.payload = payload
+        self.qc = qc
+        self.child = None
 
 class LedgerCommitInfo:
     def __init__(self) -> None:
-        pass
+        self.commit_state_id = None
+        self.vote_info_has = None
 
 class VoteMsg:
-    def __init__(self) -> None:
-        pass
+    def __init__(self, vote_info, ledger_commit_info, high_commit_qc,sender, signature) -> None:
+        self.vote_info = vote_info
+        self.ledger_commit_info = ledger_commit_info
+        self.high_commit_qc = high_commit_qc
+        self.sender = sender
+        self.signature = None # have to implement the signature
 
 class QC:
-    def __init__(self) -> None:
-        pass
-
-class Block:
-    def __init__(self) -> None:
-        pass
+    def __init__(self, vote_info, ledger_commit_info, signatures, author, author_signatures) -> None:
+        self.vote_info = vote_info
+        self.ledger_commit_info = ledger_commit_info
+        self.signatures = signatures
+        self.author = author
+        self.author_signatures = author_signatures
+        self.parent_id = None
