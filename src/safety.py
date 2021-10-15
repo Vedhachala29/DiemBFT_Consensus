@@ -52,8 +52,9 @@ class Safety:
     def __commit_state_id_candidate(self, block_round, qc):
         # find the committed id in case a qc is formed in the vote round
         if self.__consecutive(block_round, qc.vote_info.round) and qc.vote_info.round >= 0:
-            print('cs cand id ', self.modules_map['config']['id'], obj_to_string(qc))
+            # print('cs cand id ', self.modules_map['config']['id'], obj_to_string(qc))
             # return self.modules_map['ledger'].pending_state(qc.id)  # TODO qc structure and align with it 
+            return qc.vote_info.round 
         else:
             return None  #TODO check this symbol
 
