@@ -5,7 +5,6 @@ class LeaderElection:
     def __init__(self, modules_map, window_size:int, exclude_size: int) -> None:
         self.modules_map = modules_map
         self.validators = self.modules_map['validators_list']
-        # print(modules_map)
         self.window_size = window_size
         self.exclude_size = exclude_size
         self.reputation_leaders = {}

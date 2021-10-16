@@ -16,8 +16,9 @@ class MemPool:
             return self.commands.pop(0)
         return None
     
-    def update_mempool(self, payload):
-        for item in self.commands:
-            if item[0] == payload[0] and item[1] == payload[1] and item[2] == payload[2]:
-                self.commands.remove(item)
-                break
+    def update_mempool(self, txns):
+        for payload in txns:
+            for item in self.commands:
+                if item[0] == payload[0] and item[1] == payload[1] and item[2] == payload[2]:
+                    self.commands.remove(item)
+                    break

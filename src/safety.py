@@ -56,8 +56,6 @@ class Safety:
     def __commit_state_id_candidate(self, block_round, qc):
         # find the committed id in case a qc is formed in the vote round
         if self.__consecutive(block_round, qc.vote_info.round) and qc.vote_info.round >= 0:
-            # print('cs cand id ', self.modules_map['config']['id'], obj_to_string(qc))
-            # return self.modules_map['ledger'].pending_state(qc.id)  # TODO qc structure and align with it 
             return qc.vote_info.round 
         else:
             return None  #TODO check this symbol
@@ -104,16 +102,12 @@ class Safety:
 
     def make_vote(self, b, last_tc):
         qc_round = b.qc.vote_info.round
-        #print("in makeout", qc_round)
         if self.valid_signatures(b, last_tc) and self.__safe_to_vote(b.round, qc_round, last_tc):
             self.__update_highest_qc_round(qc_round)  # Protect qc round
-            #print("in makeout voteinfo for loop")
             self.__increase_highest_vote_round(b.round) # Don’t vote again in this (or lower) round
             # VoteInfo carries the potential QC info with ids and rounds of the parent QC
             vote_info = Vote_Info(b.id, b.round, None if not(b.qc) else b.qc.vote_info.id, qc_round)
-            #print("in makeout voteinfo", obj_to_string(vote_info))
             ledger_commit_info = LedgerCommitInfo(self.__commit_state_id_candidate(b.round, b.qc))  # TODO
-            #print("in makeout lcinfo", obj_to_string(vote_info))
             signature = self.sign_message(ledger_commit_info)
             return VoteMsg(vote_info, ledger_commit_info, self.modules_map['block_tree'].high_commit_qc,self.modules_map['config']["id"], signature )  # TODO
         return None

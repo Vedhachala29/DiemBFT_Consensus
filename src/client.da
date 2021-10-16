@@ -13,6 +13,5 @@ class Client(process):
         return pvt_key.sign(serialized_msg)
 
     def run():
-        # output('Logical time', logical_clock())
         send(('Client', id, sign_message(f"transactions_{id}"), logical_clock()), to=self.validators)
         await(exit_flag == 1)
