@@ -1,4 +1,3 @@
-
 import nacl.hash
 def obj_to_string(obj, extra='    '):
     return str(obj.__class__) + '\n' + '\n'.join(
@@ -56,10 +55,8 @@ class BlockTree:
         self.root.child = self.pending_block_tree
 
     def __prune(self, id):
-        if self.pending_block_tree and self.pending_block_tree.child:
-            self.pending_block_tree = self.pending_block_tree.child
-        else:
-            self.pending_block_tree = None
+        self.pending_block_tree = None
+
     def __add(self,block):
         if(self.pending_block_tree != None):
             self.pending_block_tree.child = block
@@ -69,21 +66,21 @@ class BlockTree:
                 self.high_commit_qc.child = self.pending_block_tree
 
     def process_qc(self, qc):
-        if qc and qc.ledger_commit_info and qc.ledger_commit_info.commit_state_id and ((not self.high_commit_qc) or qc.vote_info.id > self.high_commit_qc.vote_info.id) :
+        if qc and qc.ledger_commit_info and qc.ledger_commit_info.commit_state_id:
             print('committing ',  qc.ledger_commit_info.commit_state_id)
             print("current round " , self.modules["pace_maker"].current_round)
             print("my id", self.modules["config"]["id"])
             print('commit qc ledger', qc.ledger_commit_info.commit_state_id)
-            
+            self.modules.Ledger.commit(qc.vote_info.parent_id)
+            print("Committing to Ledger file successful")
             self.high_commit_qc = qc
-            # if self.modules["config"]["id"] == 1:
+            # if self.modules["config"]["id"] == 1:    
             #     self.hhdfkdnfk
-            #     self.modules.Ledger.commit(qc.vote_info.parent_id)
             self.__prune(qc.vote_info.parent_id)
-                
-        if qc and qc.vote_info.round > self.high_qc.vote_info.round: 
+            # if (not self.high_commit_qc) or qc.vote_info.id > self.high_commit_qc.vote_info.id:
+            #     self.high_commit_qc = qc
+        if qc and self.high_qc and qc.vote_info.round > self.high_qc.vote_info.round: 
             self.high_qc = qc
-        #print('in pqc', qc)
 
     def execute_and_insert(self, b):
         #print('execute_and_insert ', b)

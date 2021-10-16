@@ -110,10 +110,11 @@ class Validator(process):
 
     def process_vote_message(vote_msg):
         qc = self.modules["block_tree"].process_vote(vote_msg)
+        # print(self.obj_to_string(self.modules["block_tree"]))
+        # output('qc :  ',self.modules["config"]["id"],  self.obj_to_string(qc))
         if qc != None:
             # output('qc formed at :  ',self.modules["config"]["id"],  self.obj_to_string(qc))
             self.process_certificate_qc(qc)
-            # output('btree :  ',self.modules["config"]["id"],  self.obj_to_string(self.modules["block_tree"].high_qc))
             self.process_new_round_event(None)
     
     def process_new_round_event(last_tc:None):
