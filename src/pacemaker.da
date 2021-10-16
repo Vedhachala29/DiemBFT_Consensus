@@ -33,7 +33,6 @@ class PaceMaker:
         return True
 
     def advance_round_qc(self, qc) :
-        # print('in pace maker', qc.vote_info.round)
         if qc == None or qc.vote_info.round < self.current_round:
             return False
         
