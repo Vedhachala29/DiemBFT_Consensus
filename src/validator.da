@@ -1,4 +1,6 @@
 import sys
+import pickle
+import os
 
 from leader_election import LeaderElection
 from ledger import Ledger
@@ -41,7 +43,17 @@ class Validator(process):
         self.is_leader =  True if id == 0 else False
         self.sysinit = True
         self.has_pending_transactions = True
+        self.initalize_ledger_file()
         
+    def initalize_ledger_file():
+        file_path = "../ledgers/ledger_" + str(self.modules["config"]["id"]) + ".txt"
+        if not os.path.exists("../ledgers"):
+            os.makedirs("../ledgers")
+        
+        with open(file_path, 'w+') as f:
+            pass
+
+
     def run():
         
         await(self.exit_flag)
@@ -63,26 +75,31 @@ class Validator(process):
             #     timeout_msg  = TimeOutMsg(timeout_info, self.pace_maker.last_round_tc, self.modules["block_tree"].high_commit_qc)
             #     send(('Timeout', timeout_msg), to=self.validators)
 
-    def receive(msg=(action, msg, time), from_=p):
-        if action == 'Local Timeout':
-            output('Local Timeout', msg)
-        elif action == 'Propose':
-            # output(p, obj_to_string(msg), self.modules["config"]["id"])
-            self.process_proposal_message(msg)
-        elif action == 'vote_message':
-            self.process_vote_message(msg)
-        elif action == 'Timeout':
-            output('Timeout', msg)
-        elif action == 'Client':
-            # output("From client: ", p, msg, time)
-            self.mem_pool.add_command_to_mempool([msg, p, time])
-            # output(self.modules["config"]["id"], obj_to_string(self.mem_pool))
-            if self.sysinit:
-                self.sysinit = False
-                self.process_new_round_event(None)
 
+    def receive(msg=(action, sender, msg, time), from_=p):
+        valid_msg = self.modules['safety'].verify_msg_signature(msg, sender)
+        if valid_msg:
+            msg = pickle.loads(msg.message)
+            if action == 'Local Timeout':
+                output('Local Timeout', msg)
+            elif action == 'Propose':
+                # output(p, obj_to_string(msg), self.modules["config"]["id"])
+                self.process_proposal_message(msg)
+            elif action == 'vote_message':
+                self.process_vote_message(msg)
+            elif action == 'Timeout':
+                output('Timeout', msg)
+            elif action == 'Client':
+                output("from client",p,msg)
+                self.mem_pool.add_command_to_mempool([msg, p, time])
+                if self.sysinit:
+                    self.sysinit = False
+                    self.process_new_round_event(None)
+
+            else:
+                output('Default')
         else:
-            output('Default')
+            output('Bad signature')
 
 
     def process_certificate_qc(qc):
@@ -114,7 +131,8 @@ class Validator(process):
         if vote_msg != None:
             next_leader = self.modules["leader_election"].get_leader(round+1)
             # output(" next_leader: ", next_leader, "Current Round: ", round)
-            send(('vote_message', vote_msg, logical_clock()), to=self.validators[next_leader])
+            # send(('vote_message', vote_msg, logical_clock()), to=self.validators[next_leader])
+            send(('vote_message', id, self.modules["safety"].sign_message(vote_msg), logical_clock()), to=self.validators[next_leader])
 
     def process_timeout_message(M):
         self.process_certficate_qc(M.tmo_info.high_qc)
@@ -128,6 +146,7 @@ class Validator(process):
     def process_vote_message(vote_msg):
         qc = self.modules["block_tree"].process_vote(vote_msg)
         # print(self.obj_to_string(self.modules["block_tree"]))
+
         # output('qc :  ',self.modules["config"]["id"],  self.obj_to_string(qc))
         if qc != None:
             # output('qc formed at :  ',self.modules["config"]["id"],  obj_to_string(qc))
@@ -147,12 +166,20 @@ class Validator(process):
             block = self.modules["block_tree"].generate_block(self.modules["config"], pending_transactions, self.modules["pace_maker"].current_round)
             block.author = self.modules["config"]["id"]
             
-            proposal_msg = ProposalMsg(block, last_tc, self.block_tree.high_commit_qc,self.modules["config"]["id"], None)
-            send(('Propose', proposal_msg, logical_clock()), to=self.validators)
+            # send(('Propose', proposal_msg, logical_clock()), to=self.validators)
+            signature = self.modules["safety"].sign_message(block.id)
+            proposal_msg = ProposalMsg(block, last_tc, self.block_tree.high_commit_qc,self.modules["config"]["id"], signature)
+            send(('Propose', id, self.modules["safety"].sign_message(proposal_msg), logical_clock()), to=self.validators)
         else :
             output("I am not a leader", self.modules["config"]["id"])
 
     
     
+    # def obj_to_string(obj, extra='    '):
+    #     return str(obj.__class__) + '\n' + '\n'.join(
+    #         (extra + (str(item) + ' = ' +
+    #                 (obj_to_string(obj.__dict__[item], extra + '    ') if hasattr(obj.__dict__[item], '__dict__') else str(
+    #                       obj.__dict__[item])))
+    #         for item in sorted(obj.__dict__)))
 
 

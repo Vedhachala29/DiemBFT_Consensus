@@ -1,4 +1,8 @@
 import nacl.hash
+from collections import defaultdict
+from typing import DefaultDict
+from util import get_hash
+
 def obj_to_string(obj, extra='    '):
     return str(obj.__class__) + '\n' + '\n'.join(
         (extra + (str(item) + ' = ' +
@@ -13,28 +17,34 @@ class Vote_Info:
         self.parent_id = parent_id
         self.parent_round = parent_round
 
+    def __hash__(self):
+        return hash((self.id,self.round,self.parent_id,self.parent_round))
+
 class QC:
-    def __init__(self, vote_info = Vote_Info(), ledger_commit_info = None, signatures = None, author = None, author_signatures = None):
+    def __init__(self, vote_info = Vote_Info(), ledger_commit_info = None, signatures = None, author = None, author_signature = None):
         self.vote_info = vote_info
         self.ledger_commit_info = ledger_commit_info
         self.signatures = signatures
         self.author = author
-        self.author_signatures = author_signatures
+        self.author_signature = author_signature
         self.parent_id = None
 
 class Block:
-    def __init__(self, config, txns, round, qc=QC()) -> None:
+    def __init__(self, id, config, txns, round, qc=QC()) -> None:
         self.author = 0
         self.round = round
         self.payload = txns
         self.qc = qc
         self.child = None
-        self.id = 'B' + str(round)
+        self.id = id
 
 class LedgerCommitInfo:
     def __init__(self, id) -> None:
         self.commit_state_id = id
         self.vote_info_hash = None
+
+    def __hash__(self):
+        return hash((self.commit_state_id,self.vote_info_hash))
 
 class VoteMsg:
     def __init__(self, vote_info, ledger_commit_info, high_commit_qc,sender, signature) -> None:
@@ -42,12 +52,12 @@ class VoteMsg:
         self.ledger_commit_info = ledger_commit_info
         self.high_commit_qc = high_commit_qc
         self.sender = sender
-        self.signature = None # have to implement the signature
+        self.signature = signature
 
 class BlockTree:
     def __init__(self, modules) -> None:
         self.pending_block_tree = None
-        self.pending_votes = {}
+        self.pending_votes = defaultdict(set)
         self.high_qc = QC()
         self.high_commit_qc = None
         self.modules = modules
@@ -58,8 +68,9 @@ class BlockTree:
         # print("before prune ", obj_to_string(self.pending_block_tree))
         if self.pending_block_tree and self.pending_block_tree.child:
             self.pending_block_tree = self.pending_block_tree.child
-            print("Pruning ", self.pending_block_tree.payload[0])
-            self.pending_block_tree.payload.pop(0)
+            print("Pruning ", self.pending_block_tree.payload)
+            if self.pending_block_tree.payload: 
+                self.pending_block_tree.payload.pop(0)
         else:
             self.pending_block_tree = None
 
@@ -86,7 +97,7 @@ class BlockTree:
             # print("my id", self.modules["config"]["id"], qc.vote_info.parent_id)
             # print('commit qc ledger', qc.ledger_commit_info.commit_state_id)
             self.modules["ledger"].commit(qc.vote_info.parent_id)
-            print("Committing to Ledger file successful")
+            # print("Committing to Ledger file_", str(self.modules["config"]["id"]),  " successful")
             self.high_commit_qc = qc
             # if self.modules["config"]["id"] == 1:    
             #     self.hhdfkdnfk
@@ -105,20 +116,22 @@ class BlockTree:
 
     def process_vote(self, vote):
         self.process_qc(vote.high_commit_qc)
-        # vote_idx = hash(vote.ledger_commit_info)
-        # self.pending_votes[vote_idx] = self.pending_votes[vote_idx] + vote.signature
-        # if self.pending_votes[vote_idx] == 2*(self.modules.config.nfaulty)+1:
-        #     qc = QC(vote.vote_info, vote.state_id, self.pending_votes[vote_idx])
-        #     return qc
-        # print('v2', vote.vote_info.round)
-        count = 1 if not (self.pending_votes.get(vote.vote_info.round,None)) else self.pending_votes[vote.vote_info.round] + 1
-        self.pending_votes[vote.vote_info.round] = count
+        vote_idx = get_hash(vote.ledger_commit_info)
+        self.pending_votes[vote_idx].add((vote.sender, vote.signature))
+        if len(self.pending_votes[vote_idx]) == 2*(self.modules['config']['nfaulty'])+1:
+            author_sign = self.modules['safety'].sign_message(self.pending_votes[vote_idx])
+            qc = QC(vote.vote_info, vote.ledger_commit_info, self.pending_votes[vote_idx], self.modules['config']['id'], author_sign)
+            print("Formed qc")
+            return qc
+        print('v2', vote.vote_info.round)
+        # count = 1 if not (self.pending_votes.get(vote.vote_info.round,None)) else self.pending_votes[vote.vote_info.round] + 1
+        # self.pending_votes[vote.vote_info.round] = count
         # print('v3', count)
-        if count == 2:
-            pending_votes = {}
-            return QC(vote.vote_info, vote.ledger_commit_info, None, self.modules["config"]["id"], None)
+        # if count == 2:
+        #     return QC(vote.vote_info, vote.ledger_commit_info, None, None, None)
         return None
 
     def generate_block(self, config, txns, current_round):
         #print('hereee ', config)
-        return Block(config, txns, current_round, self.high_qc)
+        block_id = get_hash((config['id'], current_round, txns, self.high_qc.vote_info.id, self.high_qc.signatures))
+        return Block(block_id, config, txns, current_round, self.high_qc)

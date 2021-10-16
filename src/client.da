@@ -1,13 +1,18 @@
 import sys
 # config(channel is fifo, clock is lamport)
+import pickle
 
 class Client(process):
 
-    def setup(validators: list):  # have to create message class
+    def setup(id, validators: list,  pvt_key):  # have to create message class
         self.exit_flag = 0
         pass
 
+    def sign_message(msg_obj):
+        serialized_msg = pickle.dumps(msg_obj)
+        return pvt_key.sign(serialized_msg)
+
     def run():
         # output('Logical time', logical_clock())
-        send(('Client', 'Transactions', logical_clock()), to=self.validators)
+        send(('Client', id, sign_message(f"transactions_{id}"), logical_clock()), to=self.validators)
         await(exit_flag == 1)

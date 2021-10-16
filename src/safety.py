@@ -2,6 +2,10 @@ import nacl.encoding
 import nacl.hash
 from nacl.bindings.utils import sodium_memcmp
 from block_tree import Vote_Info, VoteMsg, LedgerCommitInfo
+import pickle
+from nacl.signing import VerifyKey
+from nacl.exceptions import BadSignatureError
+
 
 def obj_to_string(obj, extra='    '):
     return str(obj.__class__) + '\n' + '\n'.join(
@@ -70,8 +74,33 @@ class Safety:
         dgst = self.hasher(msg, encoder=nacl.encoding.HexEncoder)
         return sodium_memcmp(dgst, msg_obj['digest'])
 
+    def sign_message(self, msg_obj):
+        serialized_msg = pickle.dumps(msg_obj)
+        return self.__private_key.sign(serialized_msg)
+
+    def verify_msg_signature(self, signed_obj, sender):
+        try:
+            verify_key_bytes = self.__public_keys[sender]
+            verify_key = VerifyKey(verify_key_bytes)
+            verify_key.verify(signed_obj)
+            return True
+        except BadSignatureError:
+            print("Bad Signature")
+            return False
+
+
     def valid_signatures(self, block, tc):
-        return True  # TODO
+        validity = True
+        #dont check for genesis validity
+        if block.qc.vote_info.round == -1: 
+            return validity
+        qc = block.qc
+        #Validate signature of qc author
+        validity = validity and self.verify_msg_signature(qc.author_signature,qc.author)
+        #Validate signature for each of the signature in qc's quorum of signatures
+        for qc_sign in qc.signatures:
+            validity = validity and self.verify_msg_signature(qc_sign[1],qc_sign[0])
+        return validity  
 
     def make_vote(self, b, last_tc):
         qc_round = b.qc.vote_info.round
@@ -85,8 +114,9 @@ class Safety:
             #print("in makeout voteinfo", obj_to_string(vote_info))
             ledger_commit_info = LedgerCommitInfo(self.__commit_state_id_candidate(b.round, b.qc))  # TODO
             #print("in makeout lcinfo", obj_to_string(vote_info))
-            return VoteMsg(vote_info, ledger_commit_info, self.modules_map['block_tree'].high_commit_qc,self.modules_map['config']["id"], None )  # TODO
-        return None 
+            signature = self.sign_message(ledger_commit_info)
+            return VoteMsg(vote_info, ledger_commit_info, self.modules_map['block_tree'].high_commit_qc,self.modules_map['config']["id"], signature )  # TODO
+        return None
 
     def make_timeout(self, round, high_qc, last_tc):
         qc_round = high_qc.vote_info.round
