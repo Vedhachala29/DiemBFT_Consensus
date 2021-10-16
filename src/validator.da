@@ -61,7 +61,7 @@ class Validator(process):
 
         await(self.exit_flag == 1)
 
-    def receive(msg=(action, msg), from_=p):
+    def receive(msg=(action, msg, time), from_=p):
         if action == 'Local Timeout':
             output('Local Timeout', msg)
         elif action == 'Propose':
@@ -72,8 +72,9 @@ class Validator(process):
         elif action == 'Timeout':
             output('Timeout', msg)
         elif action == 'Client':
-            output("from client",p,msg)
-            self.mem_pool.add_command_to_queue(msg)
+            # output("From client: ", p, msg, time)
+            self.mem_pool.add_command_to_mempool([msg, p, time])
+            # output(self.modules["config"]["id"], obj_to_string(self.mem_pool))
             if self.sysinit:
                 self.sysinit = False
                 self.process_new_round_event(None)
@@ -95,16 +96,22 @@ class Validator(process):
         leader = self.modules["leader_election"].get_leader(round)
         
         if P.block.round != round or P.sender != leader or P.block.author != leader or not self.has_pending_transactions:
-            output("No Progress")
+            output(self.modules["config"]["id"], "No Progress")
             return
         
         self.modules["block_tree"].execute_and_insert(P.block)
+
+        # Logic to remove transaction from non-leader validator's mempool
+    
+        # self.mem_pool.update_mempool(P.block.payload[0])
+        
+
         vote_msg = self.modules["safety"].make_vote(P.block, P.last_round_tc)
         # output('after makeout ',self.modules["config"]["id"], self.obj_to_string(vote_msg))
         if vote_msg != None:
             next_leader = self.modules["leader_election"].get_leader(round+1)
             # output(" next_leader: ", next_leader, "Current Round: ", round)
-            send(('vote_message', vote_msg), to=self.validators[next_leader])
+            send(('vote_message', vote_msg, logical_clock()), to=self.validators[next_leader])
 
     def process_timeout_message(M):
         self.process_certficate_qc(M.tmo_info.high_qc)
@@ -129,7 +136,7 @@ class Validator(process):
         if self.modules["config"]["id"] == self.modules["leader_election"].get_leader(self.modules["pace_maker"].current_round):
             transaction = self.mem_pool.get_transaction()
             pending_transactions = self.modules["block_tree"].get_pending_transactions()
-            print('tts ', self.modules["config"]["id"] , transaction, pending_transactions, len(self.mem_pool.queue))
+            # print('tts ', self.modules["config"]["id"] , transaction, pending_transactions, len(self.mem_pool.commands))
             if transaction:
                 pending_transactions.append(transaction)
             else:
@@ -138,7 +145,7 @@ class Validator(process):
             block.author = self.modules["config"]["id"]
             
             proposal_msg = ProposalMsg(block, last_tc, self.block_tree.high_commit_qc,self.modules["config"]["id"], None)
-            send(('Propose', proposal_msg), to=self.validators)
+            send(('Propose', proposal_msg, logical_clock()), to=self.validators)
         else :
             output("I am not a leader", self.modules["config"]["id"])
 
