@@ -36,30 +36,29 @@ class Validator(process):
         self.sysinit = True
         
     def run():
-        output('in run')
-        # while not self.exit_flag:
-        #     self.round_done = False
-        #     timer_duration = self.pace_maker.get_round_timer(10000)
-        #     if await(self.round_done):
-        #         output("Round " + self.pace_maker.current_round + " is done after awaiting")
-        #     elif timeout(timer_duration):
-        #         timeout_info = self.safety.make_timeout(self.pace_maker.current_round, self.block_tree.high_qc,
-        #                                                 self.pace_maker.last_round_tc)
-                
-        #         timeout_msg  = TimeOutMsg(timeout_info, self.pace_maker.last_round_tc, self.modules["block_tree"].high_commit_qc)
-        #         send(('Timeout', timeout_msg), to=self.validators)
+        
+        # self.round_done = False
+        # output("Starting Timer")
+        # while not self.round_done:
+        #     timer_duration = self.pace_maker.get_round_timer(1000)
+        #     await(timer_duration == 0)
+        #     output("Round " , self.pace_maker.current_round , " is done after awaiting")
+        #     self.round_done = True
 
-        # self.process_new_round_event(None)
-        # while True:
-        #     if  (not self.mem_pool.is_empty()) and self.pace_maker.current_round == 0:
-        #         self.process_new_round_event()
+            # elif timeout(timer_duration):
+            #     timeout_info = self.safety.make_timeout(self.pace_maker.current_round, self.block_tree.high_qc,
+            #                                             self.pace_maker.last_round_tc)
+                
+            #     timeout_msg  = TimeOutMsg(timeout_info, self.pace_maker.last_round_tc, self.modules["block_tree"].high_commit_qc)
+            #     send(('Timeout', timeout_msg), to=self.validators)
+
         await(self.exit_flag == 1)
 
     def receive(msg=(action, msg), from_=p):
         if action == 'Local Timeout':
             output('Local Timeout', msg)
         elif action == 'Propose':
-            output(p, self.obj_to_string(msg), self.modules["config"]["id"])
+            # output(p, self.obj_to_string(msg), self.modules["config"]["id"])
             self.process_proposal_message(msg)
         elif action == 'vote_message':
             self.process_vote_message(msg)
@@ -92,12 +91,12 @@ class Validator(process):
             output("No Progress")
             return
         
-        self.modules["block_tree"].execute_and_insert(P)
+        self.modules["block_tree"].execute_and_insert(P.block)
         vote_msg = self.modules["safety"].make_vote(P.block, P.last_round_tc)
         # output('after makeout ',self.modules["config"]["id"], self.obj_to_string(vote_msg))
         if vote_msg != None:
             next_leader = self.modules["leader_election"].get_leader(round+1)
-            output(" next_leader: ", next_leader, "Current Round: ", round)
+            # output(" next_leader: ", next_leader, "Current Round: ", round)
             send(('vote_message', vote_msg), to=self.validators[next_leader])
 
     def process_timeout_message(M):
@@ -112,7 +111,7 @@ class Validator(process):
     def process_vote_message(vote_msg):
         qc = self.modules["block_tree"].process_vote(vote_msg)
         if qc != None:
-            output('qc formed at :  ',self.modules["config"]["id"],  self.obj_to_string(qc))
+            # output('qc formed at :  ',self.modules["config"]["id"],  self.obj_to_string(qc))
             self.process_certificate_qc(qc)
             # output('btree :  ',self.modules["config"]["id"],  self.obj_to_string(self.modules["block_tree"].high_qc))
             self.process_new_round_event(None)
@@ -127,11 +126,7 @@ class Validator(process):
         else :
             output("I am not a leader", self.modules["config"]["id"])
 
-    def obj_to_string(obj, extra='    '):
-        return str(obj.__class__) + '\n' + '\n'.join(
-            (extra + (str(item) + ' = ' +
-                    (obj_to_string(obj.__dict__[item], extra + '    ') if hasattr(obj.__dict__[item], '__dict__') else str(
-                          obj.__dict__[item])))
-            for item in sorted(obj.__dict__)))
+    
+    
 
 
