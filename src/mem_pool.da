@@ -3,16 +3,21 @@ from collections import deque
 
 class MemPool:
     def __init__(self) -> None:
-        self.queue = deque()
+        self.commands = []
 
-    def add_command_to_queue(self, client_command):
-        self.queue.append(client_command)
+    def add_command_to_mempool(self, client_command):
+        self.commands.append(client_command)
 
     def is_empty(self):
-        return len(self.queue) == 0
+        return len(self.commands) == 0
 
     def get_transaction(self):
         if not self.is_empty():
-            return self.queue.pop()
-
+            return self.commands.pop(0)
         return None
+    
+    def update_mempool(self, payload):
+        for item in self.mem_pool.commands:
+            if item[0] == payload[0] and item[1] == payload[1] and item[2] == payload[2]:
+                self.mem_pool.commands.remove(item)
+                break

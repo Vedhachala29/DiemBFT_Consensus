@@ -1,5 +1,5 @@
 import sys
-
+# config(channel is fifo, clock is lamport)
 
 class Client(process):
 
@@ -8,5 +8,6 @@ class Client(process):
         pass
 
     def run():
-        send(('Client', "transactions"), to=self.validators)
+        # output('Logical time', logical_clock())
+        send(('Client', 'Transactions', logical_clock()), to=self.validators)
         await(exit_flag == 1)
