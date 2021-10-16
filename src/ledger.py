@@ -12,13 +12,14 @@ class Ledger:
 
     def commit(self, block_id:int):
         pending_tree = self.modules_map["block_tree"].pending_block_tree
-        if pending_tree.id != block_id:
+        payload = pending_tree.payload[0] + "\n" if len(pending_tree.payload) > 0 else None
+        if pending_tree.id != block_id or not payload:
             print('Error while committing : Block_id mismatch. Block_id: ' , block_id, ', pending_tree.id: ', pending_tree.id)
             exit(0)
         
         file_path = "../ledgers/ledger_" + str(self.modules_map["config"]["id"]) + ".txt"
         file = open(file_path, "a")
-        payload = pending_tree.payload + "\n"
+        
         file.write(payload)
 
         file.flush()

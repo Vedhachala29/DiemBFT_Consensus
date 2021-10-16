@@ -12,7 +12,7 @@ class MemPool:
         return len(self.queue) == 0
 
     def get_transaction(self):
-        if self.queue:
+        if not self.is_empty():
             return self.queue.pop()
 
         return None
