@@ -18,7 +18,7 @@ def obj_to_string(obj, extra='    '):
 class Validator(process):
 
     def setup(id: int, validators: list, public_keys: list, private_key):
-        self.exit_flag = 0
+        self.exit_flag = False
         self.validators = validators
         self.modules = {}                  # A dictionary which stores all the modules' references  # delta, 1 is a place holder
         self.modules["config"] = {}
@@ -44,13 +44,17 @@ class Validator(process):
         
     def run():
         
-        # self.round_done = False
-        # output("Starting Timer")
-        # while not self.round_done:
-        #     timer_duration = self.pace_maker.get_round_timer(1000)
-        #     await(timer_duration == 0)
-        #     output("Round " , self.pace_maker.current_round , " is done after awaiting")
-        #     self.round_done = True
+        await(self.exit_flag)
+        # while not self.exit_flag:
+        #     output("Starting Timer")
+        #     cur_round = self.pace_maker.current_round
+        #     timer_duration = self.pace_maker.get_round_timer(10)
+        #     output("Current Round", self.pace_maker.current_round)
+        #     if await(self.pace_maker.current_round == cur_round + 1):
+        #         output("Round Progressed to ", self.pace_maker.current_round ,"No timeouts") 
+        #         pass
+        #     elif timeout(timer_duration): 
+        #         output("Round timed out after ", timer_duration) 
 
             # elif timeout(timer_duration):
             #     timeout_info = self.safety.make_timeout(self.pace_maker.current_round, self.block_tree.high_qc,
@@ -58,8 +62,6 @@ class Validator(process):
                 
             #     timeout_msg  = TimeOutMsg(timeout_info, self.pace_maker.last_round_tc, self.modules["block_tree"].high_commit_qc)
             #     send(('Timeout', timeout_msg), to=self.validators)
-
-        await(self.exit_flag == 1)
 
     def receive(msg=(action, msg, time), from_=p):
         if action == 'Local Timeout':
@@ -102,8 +104,9 @@ class Validator(process):
         self.modules["block_tree"].execute_and_insert(P.block)
 
         # Logic to remove transaction from non-leader validator's mempool
-    
-        # self.mem_pool.update_mempool(P.block.payload[0])
+
+        if len(P.block.payload) > 0:
+            self.mem_pool.update_mempool(P.block.payload[0])
         
 
         vote_msg = self.modules["safety"].make_vote(P.block, P.last_round_tc)
