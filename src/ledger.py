@@ -12,7 +12,7 @@ class Ledger:
 
     def commit(self, block_id:int):
         pending_tree = self.modules_map["block_tree"].pending_block_tree
-        payload = pending_tree.payload[0] + "\n" if len(pending_tree.payload) > 0 else None
+        payload = str(pending_tree.payload[0]) + "\n" if len(pending_tree.payload) > 0 else None
         if pending_tree.id != block_id or not payload:
             print('Error while committing : Block_id mismatch. Block_id: ' , block_id, ', pending_tree.id: ', pending_tree.id)
             exit(0)

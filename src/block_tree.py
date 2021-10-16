@@ -58,6 +58,7 @@ class BlockTree:
         # print("before prune ", obj_to_string(self.pending_block_tree))
         if self.pending_block_tree and self.pending_block_tree.child:
             self.pending_block_tree = self.pending_block_tree.child
+            print("Pruning ", self.pending_block_tree.payload[0])
             self.pending_block_tree.payload.pop(0)
         else:
             self.pending_block_tree = None
@@ -80,10 +81,10 @@ class BlockTree:
 
     def process_qc(self, qc):
         if qc and qc.ledger_commit_info  and qc.ledger_commit_info.commit_state_id != None and ((not self.high_commit_qc) or qc.vote_info.id > self.high_commit_qc.vote_info.id) :
-            print('committing ',  qc.ledger_commit_info.commit_state_id)
-            print("current round " , self.modules["pace_maker"].current_round)
-            print("my id", self.modules["config"]["id"])
-            print('commit qc ledger', qc.ledger_commit_info.commit_state_id)
+            # print('committing ',  qc.ledger_commit_info.commit_state_id)
+            # print("current round " , self.modules["pace_maker"].current_round)
+            # print("my id", self.modules["config"]["id"], qc.vote_info.parent_id)
+            # print('commit qc ledger', qc.ledger_commit_info.commit_state_id)
             self.modules["ledger"].commit(qc.vote_info.parent_id)
             print("Committing to Ledger file successful")
             self.high_commit_qc = qc
