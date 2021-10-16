@@ -55,7 +55,12 @@ class BlockTree:
         self.root.child = self.pending_block_tree
 
     def __prune(self, id):
-        self.pending_block_tree = None
+        # print("before prune ", obj_to_string(self.pending_block_tree))
+        if self.pending_block_tree and self.pending_block_tree.child:
+            self.pending_block_tree = self.pending_block_tree.child
+            self.pending_block_tree.payload.pop(0)
+        else:
+            self.pending_block_tree = None
 
     def __add(self,block):
         if(self.pending_block_tree != None):
@@ -65,8 +70,16 @@ class BlockTree:
             if self.high_commit_qc:
                 self.high_commit_qc.child = self.pending_block_tree
 
+    def get_pending_transactions(self):
+        if not self.pending_block_tree:
+            return []
+        elif not self.pending_block_tree.child:
+            return self.pending_block_tree.payload
+        else:
+            return self.pending_block_tree.child.payload
+
     def process_qc(self, qc):
-        if qc and qc.ledger_commit_info and qc.ledger_commit_info.commit_state_id:
+        if qc and qc.ledger_commit_info  and qc.ledger_commit_info.commit_state_id != None and ((not self.high_commit_qc) or qc.vote_info.id > self.high_commit_qc.vote_info.id) :
             print('committing ',  qc.ledger_commit_info.commit_state_id)
             print("current round " , self.modules["pace_maker"].current_round)
             print("my id", self.modules["config"]["id"])
@@ -108,10 +121,3 @@ class BlockTree:
     def generate_block(self, config, txns, current_round):
         #print('hereee ', config)
         return Block(config, txns, current_round, self.high_qc)
-    
-    def obj_to_string(obj, extra='    '):
-        return str(obj.__class__) + '\n' + '\n'.join(
-            (extra + (str(item) + ' = ' +
-                    (obj_to_string(obj.__dict__[item], extra + '    ') if hasattr(obj.__dict__[item], '__dict__') else str(
-                          obj.__dict__[item])))
-            for item in sorted(obj.__dict__)))

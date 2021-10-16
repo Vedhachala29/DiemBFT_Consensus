@@ -8,6 +8,12 @@ from messages import TimeOutMsg, TimeoutInfo, TC, ProposalMsg
 from mem_pool import MemPool
 from safety import Safety
 
+def obj_to_string(obj, extra='    '):
+    return str(obj.__class__) + '\n' + '\n'.join(
+        (extra + (str(item) + ' = ' +
+                  (obj_to_string(obj.__dict__[item], extra + '    ') if hasattr(obj.__dict__[item], '__dict__') else str(
+                      obj.__dict__[item])))
+         for item in sorted(obj.__dict__)))
 
 class Validator(process):
 
@@ -34,6 +40,7 @@ class Validator(process):
         self.modules['mem_pool'] = self.mem_pool
         self.is_leader =  True if id == 0 else False
         self.sysinit = True
+        self.has_pending_transactions = True
         
     def run():
         
@@ -58,7 +65,7 @@ class Validator(process):
         if action == 'Local Timeout':
             output('Local Timeout', msg)
         elif action == 'Propose':
-            # output(p, self.obj_to_string(msg), self.modules["config"]["id"])
+            # output(p, obj_to_string(msg), self.modules["config"]["id"])
             self.process_proposal_message(msg)
         elif action == 'vote_message':
             self.process_vote_message(msg)
@@ -87,7 +94,7 @@ class Validator(process):
         round = self.modules["pace_maker"].current_round
         leader = self.modules["leader_election"].get_leader(round)
         
-        if P.block.round != round or P.sender != leader or P.block.author != leader:
+        if P.block.round != round or P.sender != leader or P.block.author != leader or not self.has_pending_transactions:
             output("No Progress")
             return
         
@@ -113,15 +120,23 @@ class Validator(process):
         # print(self.obj_to_string(self.modules["block_tree"]))
         # output('qc :  ',self.modules["config"]["id"],  self.obj_to_string(qc))
         if qc != None:
-            # output('qc formed at :  ',self.modules["config"]["id"],  self.obj_to_string(qc))
+            # output('qc formed at :  ',self.modules["config"]["id"],  obj_to_string(qc))
             self.process_certificate_qc(qc)
             self.process_new_round_event(None)
     
     def process_new_round_event(last_tc:None):
         # output('module', self.modules["leader_election"].get_leader(self.modules["pace_maker"].current_round), self.modules["config"]["id"])
         if self.modules["config"]["id"] == self.modules["leader_election"].get_leader(self.modules["pace_maker"].current_round):
-            block = self.modules["block_tree"].generate_block(self.modules["config"], self.mem_pool.get_transaction(), self.modules["pace_maker"].current_round)
+            transaction = self.mem_pool.get_transaction()
+            pending_transactions = self.modules["block_tree"].get_pending_transactions()
+            print('tts ', self.modules["config"]["id"] , transaction, pending_transactions, len(self.mem_pool.queue))
+            if transaction:
+                pending_transactions.append(transaction)
+            else:
+                self.has_pending_transactions = False
+            block = self.modules["block_tree"].generate_block(self.modules["config"], pending_transactions, self.modules["pace_maker"].current_round)
             block.author = self.modules["config"]["id"]
+            
             proposal_msg = ProposalMsg(block, last_tc, self.block_tree.high_commit_qc,self.modules["config"]["id"], None)
             send(('Propose', proposal_msg), to=self.validators)
         else :
