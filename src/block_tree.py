@@ -71,7 +71,7 @@ class BlockTree:
             print("current round " , self.modules["pace_maker"].current_round)
             print("my id", self.modules["config"]["id"])
             print('commit qc ledger', qc.ledger_commit_info.commit_state_id)
-            self.modules.Ledger.commit(qc.vote_info.parent_id)
+            self.modules["ledger"].commit(qc.vote_info.parent_id)
             print("Committing to Ledger file successful")
             self.high_commit_qc = qc
             # if self.modules["config"]["id"] == 1:    
@@ -108,6 +108,7 @@ class BlockTree:
     def generate_block(self, config, txns, current_round):
         #print('hereee ', config)
         return Block(config, txns, current_round, self.high_qc)
+    
     def obj_to_string(obj, extra='    '):
         return str(obj.__class__) + '\n' + '\n'.join(
             (extra + (str(item) + ' = ' +
