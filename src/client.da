@@ -1,11 +1,12 @@
 import sys
-# config(channel is fifo, clock is lamport)
 import pickle
+from time import sleep
 
 class Client(process):
 
-    def setup(id, validators: list,  pvt_key):  # have to create message class
+    def setup(id, validators: list, public_keys: list, pvt_key):  # have to create message class
         self.exit_flag = 0
+        self.quorum_set = set()
         pass
 
     def sign_message(msg_obj):
@@ -13,5 +14,32 @@ class Client(process):
         return pvt_key.sign(serialized_msg)
 
     def run():
-        send(('Client', id, sign_message(f"transactions_{id}"), logical_clock()), to=self.validators)
+
+        num_messages = 3
+        i=0
+        while i < num_messages:
+            txn_id = id+'_'+str(i)
+            send(('Client', id, sign_message(f"transactions_{txn_id}"), logical_clock(), id+'_'+str(i)), to=self.validators)
+            if await(len(self.quorum_set) == 2):
+                i+=1
+                output("In client run method : Acknowledgements received from validators. Proceeding to next message")
+                output(self.quorum_set)
+                self.quorum_set = set()
+            elif timeout(4):
+                output("In client run method : Timed out... Retrying")
+                output(self.quorum_set)
+                self.quorum_set = set()
+        
+        # sleep(15)                                #Just to make the client wait for pending replies by validators before exiting
+        output("Client processing done")
         await(exit_flag == 1)
+
+    
+    def receive(msg = (action, sender, msg, time, txn_id), from_=p):
+        # valid_msg = self.modules['safety'].verify_msg_signature(msg, sender)
+        # if valid_msg:
+        # msg = pickle.loads(msg.message)
+        if action == "Ack":
+            output("From Validator: ", sender, msg)
+            # self.txn_committed = True
+            self.quorum_set.add(sender)

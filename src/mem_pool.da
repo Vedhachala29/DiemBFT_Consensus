@@ -2,10 +2,23 @@ from collections import deque
 
 
 class MemPool:
-    def __init__(self) -> None:
+    def __init__(self, modules) -> None:
+        self.modules = modules
         self.commands = []
 
     def add_command_to_mempool(self, client_command):
+
+        # Handling deduplicates by checking ledger's committed_Txns and Mem_pool 
+
+        txn_id = client_command[3]
+        if txn_id in self.modules['ledger'].committed_txns:
+            return 
+        
+        for item in self.commands:  
+            if txn_id in item:
+                return
+
+        # TODO : Also check in pending states?
         self.commands.append(client_command)
 
     def is_empty(self):

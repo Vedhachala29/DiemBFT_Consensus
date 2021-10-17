@@ -98,7 +98,7 @@ class BlockTree:
             self.high_commit_qc = qc
             self.__prune(qc.vote_info.parent_id)
         if qc and self.high_qc and qc.vote_info.round > self.high_qc.vote_info.round: 
-            self.high_qc = qc
+            self.high_qc = qc      
 
     def execute_and_insert(self, b):
         self.__add(b)
