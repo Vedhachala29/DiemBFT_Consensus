@@ -1,3 +1,4 @@
+from pickle import NONE
 import nacl.hash
 from collections import defaultdict
 from typing import DefaultDict
@@ -35,8 +36,10 @@ class Block:
         self.round = round
         self.payload = txns
         self.qc = qc
-        self.child = None
+        self.children = []
         self.id = id
+        self.parent_id = None
+        self.pending_commit = True
 
 class LedgerCommitInfo:
     def __init__(self, id) -> None:
@@ -56,32 +59,43 @@ class VoteMsg:
 
 class BlockTree:
     def __init__(self, modules) -> None:
-        self.pending_block_tree = None
+        self.pending_block_tree = []
         self.pending_votes = defaultdict(set)
         self.high_qc = QC()
         self.high_commit_qc = None
         self.modules = modules
         self.root = Block(-1, 0, None, None) # genesis Block
-        self.root.child = self.pending_block_tree
+        self.root.children = self.pending_block_tree
         self.pending_transactions = []
 
     def __prune(self, id):
-        if len(self.pending_transactions):
-            popped_t = self.pending_transactions.pop(0)
-            print("Pruning ", popped_t)
-        if self.pending_block_tree and self.pending_block_tree.child:
-            self.pending_block_tree = self.pending_block_tree.child
-        else:
-            self.pending_block_tree = None
+        txns_to_commit = []
+        # print("in prune ", id)
+        while id:
+            block_to_prune = self.find_block(self.pending_block_tree, id)
+            id = None
+            if block_to_prune:
+                c_payload = block_to_prune.payload
+                if c_payload and c_payload[0] == "dummy":
+                    break
+                txns_to_commit.append(block_to_prune.payload)
+                block_to_prune.pending_commit = False
+                id = block_to_prune.parent_id
+                block_to_prune = None
+        # print(" txns_to_commit ", txns_to_commit)
+        return txns_to_commit
 
     def __add(self,block):
-        self.pending_transactions = block.payload
-        if(self.pending_block_tree != None):
-            self.pending_block_tree.child = block
+        blockid = self.high_qc.vote_info.id
+        parent_block = self.find_block(self.pending_block_tree, blockid)
+        if not parent_block:
+            self.pending_block_tree.append(block)
         else:
-            self.pending_block_tree = block
-            if self.high_commit_qc:
-                self.high_commit_qc.child = self.pending_block_tree
+            block.parent_id = parent_block.id
+            parent_block.children.append(block)
+        # print("After add", parent_block)
+        # print(" Pending Tree", self.pending_transactions)
+        # print(" Pending Tree res", self.find_block(self.pending_block_tree, block.id))
 
     # def get_pending_transactions(self):
     #     if not self.pending_block_tree:
@@ -93,10 +107,13 @@ class BlockTree:
 
     def process_qc(self, qc):
         if qc and qc.ledger_commit_info  and qc.ledger_commit_info.commit_state_id != None and ((not self.high_commit_qc) or qc.vote_info.round > self.high_commit_qc.vote_info.round) :
-            print("validator", self.modules["config"]["id"] , " committing bid ", qc.vote_info.parent_id, " in ", self.modules["pace_maker"].current_round , " round")
-            self.modules["ledger"].commit(qc.vote_info.parent_id)
+            txns_to_commit = self.__prune(qc.vote_info.parent_id)
+            print("validator", self.modules["config"]["id"] , " committing bid ", qc.vote_info.parent_id,txns_to_commit, " in ", self.modules["pace_maker"].current_round , " round")
+
+            txns_to_commit = self.__prune(qc.vote_info.parent_id)
+            for txn in txns_to_commit:
+                self.modules["ledger"].commit(txn)
             self.high_commit_qc = qc
-            self.__prune(qc.vote_info.parent_id)
         if qc and self.high_qc and qc.vote_info.round > self.high_qc.vote_info.round: 
             self.high_qc = qc      
 
@@ -107,11 +124,38 @@ class BlockTree:
         self.process_qc(vote.high_commit_qc)
         vote_idx = get_hash(vote.ledger_commit_info)
         self.pending_votes[vote_idx].add((vote.sender, vote.signature))
-        if len(self.pending_votes[vote_idx]) == 2*(self.modules['config']['nfaulty'])+1:
+        if len(self.pending_votes[vote_idx]) == len(self.modules["validators_list"]) - self.modules['config']['nfaulty']:
             author_sign = self.modules['safety'].sign_message(self.pending_votes[vote_idx])
             qc = QC(vote.vote_info, vote.ledger_commit_info, self.pending_votes[vote_idx], self.modules['config']['id'], author_sign)
             return qc
         return None
+    
+    def find_block(self, blocks, id):
+        found_block = None
+        found_block_in_childs = None
+        for block in blocks:
+            if block is None:
+                continue
+            if block.id == id:
+                found_block = block
+                break
+            if (not found_block) and block.children and len(block.children) > 0:
+                found_block_in_childs = self.find_block(block.children, id)
+                if found_block_in_childs:
+                    found_block = found_block_in_childs
+                    break
+        return found_block
+
+    def get_pending_txns(blocks):
+        result = []
+        for block in blocks:
+            if block.pending_commit:
+                result.append(block.payload)
+            if block.children and len(block.children) > 0:
+                child_pending = get_pending_txns(block.children)
+                if child_pending and len(child_pending) > 0:
+                    result.extend(child_pending)
+        return result  
 
     def generate_block(self, config, txns, current_round):
         block_id = get_hash((config['id'], current_round, txns, self.high_qc.vote_info.id, self.high_qc.signatures))

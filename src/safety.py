@@ -5,6 +5,7 @@ from block_tree import Vote_Info, VoteMsg, LedgerCommitInfo
 import pickle
 from nacl.signing import VerifyKey
 from nacl.exceptions import BadSignatureError
+from messages import TimeoutInfo
 
 
 def obj_to_string(obj, extra='    '):
@@ -116,5 +117,5 @@ class Safety:
         qc_round = high_qc.vote_info.round
         if self.valid_signatures(high_qc, last_tc) and self.__safe_to_timeout(round, qc_round, last_tc):
             self.__increase_highest_vote_round(round)  # Stop voting for round
-            return TimeoutInfo(round, high_qc)  # TODO
-        return "⊥"  # TODO
+            return TimeoutInfo(round, high_qc, self.modules["config"]["id"], self.sign_message({"round": round, "high_qc_round": high_qc.vote_info.round}))
+        return None  # TODO
