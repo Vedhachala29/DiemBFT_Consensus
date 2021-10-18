@@ -1,46 +1,76 @@
 import sys
+from messages import MsgType
 from validator import Validator
+from validator_fi import ValidatorFI
 from client import Client
 import util
+from configs import configs
+import logging
+import os
+from time import sleep
 
 class Run(process):
 
     def setup(config): pass
 
+    def setup_logger(config_num, level):
+
+        if not os.path.exists(f"../logs/{config_num}"):
+            os.makedirs(f"../logs/{config_num}")
+        log_file = f"../logs/{config_num}/runner.log"
+        formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
+        handler = logging.FileHandler(log_file)       
+        handler.setFormatter(formatter)
+
+        logger = logging.getLogger("runner")
+        logger.setLevel(level)
+        logger.addHandler(handler)
+        logger.addHandler(logging.StreamHandler())
+
+        return logger
+
     def run():
-        validators = new(Validator, num=config['nreplicas'])
+        logger = setup_logger(config['sq_num'], logging.INFO)
+        logger.info("Started Runner")
+        logger.info(f"Running configuration {config}")
+        validators = new(Validator, num=config['nreplicas']-config['nfaulty'])
+        faulty_validators = new(ValidatorFI, num=config['nfaulty'])
         validators = list(validators)
+        validators.extend(faulty_validators)
+        clients = new(Client, num=config['nclients'])
+        clients = list(clients)
         signing_key_objects_validators = util.get_signing_key_objects(config['nreplicas'])
         signing_key_objects_clients = util.get_signing_key_objects(config['nclients'])
         public_keys = {i: obj.verify_key.encode() for i,obj in enumerate(signing_key_objects_validators)}
         public_keys.update({'C'+str(i): obj.verify_key.encode() for i,obj in enumerate(signing_key_objects_clients)})
+        logger.info("Spawning validator processes")
         for i, validator in enumerate(validators):
-            setup(validator, (i, validators, public_keys, signing_key_objects_validators[i]))  # setup validators with id [1 to n]
+            setup(validator, (i, validators, clients, public_keys, signing_key_objects_validators[i], 
+                                            config['sq_num'], config['nfaulty'], config['failure'],config['delta'], self))  # setup validators with id [1 to n]
             start(validator)
 
-        clients = new(Client, num=config['nclients'])
-        clients = list(clients)
+        logger.info("Spawning client processes")
         for i, client in enumerate(clients):
-            setup(client, ('C'+str(i), validators, public_keys, signing_key_objects_clients[i]))  # Sending Validators List
-            #TODO : Don't send public keys of other clients
+            setup(client, ('C'+str(i), validators, public_keys, signing_key_objects_clients[i], 
+                                        config['sq_num'], config['timeout'], config['numMessages'], config['nfaulty'],self))  # Sending Validators List
             start(client)
+        
+        await(each(l in clients, has=received((MsgType.DONE,), from_=l)))
+        
+        logger.info("Clients terminated")
+        send((MsgType.TERMINATE,), to= (validators))
 
+        await(each(l in validators, has=received((MsgType.DONE,), from_=l)))
+        
+        logger.info("Validators terminated")
+        send((MsgType.DONE,), to= nodeof(self))
+        logger.info("Runner terminated")
 
 def main():
-    config(clock="Lamport")  #, channel="fifo"
+    config(clock="Lamport", channel="fifo")
 
-    nclients = int(sys.argv[1]) if len(sys.argv) > 1 else 4
-    nreplicas = int(sys.argv[2]) if len(sys.argv) > 2 else 7
-    nfaulty = int(sys.argv[3]) if len(sys.argv) > 3 else 0
-    seed = int(sys.argv[4]) if len(sys.argv) > 4 else 10
-    timeout = int(sys.argv[5]) if len(sys.argv) > 5 else 600
-    config = {
-        'nclients': nclients,
-        'nreplicas': nreplicas,
-        'nfaulty': nfaulty,
-        'seed':  seed,
-        'timeout': timeout
-    }
-    p = new(Run)
-    setup(p, (config,))
-    start(p)
+    for config in configs:
+        p = new(Run)
+        setup(p, (config,))
+        start(p)  
+        await(received((MsgType.DONE,), from_=p))    

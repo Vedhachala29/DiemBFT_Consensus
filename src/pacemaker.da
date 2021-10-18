@@ -1,13 +1,21 @@
+from collections import defaultdict
 import sys
 from messages import TC
+
+"""
+pacemaker_local_timeout_round() and pacemaker_process_remote_timeout(timeout_msg) 
+are written in validator for message transmissions
+"""
 
 class PaceMaker:
     def __init__(self, modules_map):
         self.modules_map = modules_map
-        self.delta = 1
-        self.current_round = 0
-        self.last_round_tc = TC(-1, [-1], None)
-        self.pending_timeouts = []                  #TODO value?
+        self.current_round = 0                      # Initially zero
+        self.pending_timeouts = {}                  # For constructing TC
+        self.pending_timeouts_high_qc_rounds = {}   # high_qc_rounds of validators participated in TC
+        self.pending_timeouts_signatures = {}       # Signatures of validators who timed out at each round
+        self.delta = modules_map['config']['delta']
+        self.last_round_tc = TC(-1, [-1], None)                       
 
     def get_round_timer(self):
         return 4 * self.delta                  #4 sec timer for each round
@@ -15,17 +23,11 @@ class PaceMaker:
     def start_timer(self, new_round):
         self.current_round = new_round
 
-    def process_remote_timeout(self, timeout_msg):
-        timeout_info = timeout_msg.timeout_info
-        if timeout_info.round < self.current_round:
-            return None
-        
-        # Implement the rest of process_remote_timeout when we are testing timeout certificates.
-
     def advance_round_tc(self, tc):
         if tc is None or tc.round < self.current_round:
             return False
         self.last_round_tc = tc
+        self.modules_map['block_tree'].pending_votes = defaultdict(set)
         self.start_timer(tc.round + 1)              # Uncomment later when you are testing with timeouts
         return True
 
@@ -33,5 +35,8 @@ class PaceMaker:
         if qc == None or qc.vote_info.round < self.current_round:
             return False
         self.last_round_tc = TC(-1, [-1], None)
+        self.pending_timeouts = {}
+        self.pending_timeouts_high_qc_rounds = {}
+        self.pending_timeouts_signatures = {}
         self.start_timer(qc.vote_info.round + 1)    #Uncomment later when you are testing with timeouts
         return True

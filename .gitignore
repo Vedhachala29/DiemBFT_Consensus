@@ -1,3 +1,5 @@
 _pycache_/
 *.py[cod]
 ledger*.txt
+log*.txt
+client*.log

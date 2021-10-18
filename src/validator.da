@@ -1,7 +1,8 @@
 import pickle
 import os
-from numpy import random
 from time import sleep
+import logging
+import random
 import util
 
 from leader_election import LeaderElection
@@ -11,47 +12,62 @@ from block_tree import BlockTree
 from messages import TimeOutMsg, TimeoutInfo, TC, ProposalMsg
 from mem_pool import MemPool
 from safety import Safety
+from failure_config import Failure, FailureConfig, FailType
+from messages import MsgType
+from constants import *
 
-def obj_to_string(obj, extra='    '):
-    return str(obj.__class__) + '\n' + '\n'.join(
-        (extra + (str(item) + ' = ' +
-                  (obj_to_string(obj.__dict__[item], extra + '    ') if hasattr(obj.__dict__[item], '__dict__') else str(
-                      obj.__dict__[item])))
-         for item in sorted(obj.__dict__)))
 
 class Validator(process):
 
-    def setup(id: int, validators: list, public_keys: list, private_key):
+    def setup(id: int, validators: list, clients: list, public_keys: list, private_key, config_num, num_faulty, fail_config, delta, parent):
+        self.setup_logger(config_num, logging.INFO)
+        logging.info("Setup started")
         self.exit_flag = False
+        self.pace_maker_delta = 4
         self.validators = validators
+        self.clients = clients
         self.modules = {}                  # A dictionary which stores all the modules' references  # delta, 1 is a place holder
-        self.modules["config"] = {}
-        self.modules["config"]["id"] = id
-        self.modules["config"]["nfaulty"] = 0
-        self.pace_maker_timer = 4
-        self.modules['validators_list'] = self.validators 
-        self.safety = Safety(self.modules, private_key, public_keys, -1, -1) # TODO Check this initialization
+        self.modules[CONFIG] = {}
+        self.modules[CONFIG][ID] = id
+        self.modules[CONFIG]["nfaulty"] = num_faulty
+        self.modules[CONFIG]["config_num"] = config_num
+        self.modules[CONFIG]["delta"] = delta
+        self.modules['validators_list'] = self.validators
+        self.safety = Safety(self.modules, private_key, public_keys, -1, -1)
         self.block_tree = BlockTree(self.modules)
         self.mem_pool = MemPool(self.modules)
         self.ledger = Ledger(self.modules)
         self.pace_maker = PaceMaker(self.modules)
         self.leader_election = LeaderElection(self.modules, 5, 2)
-        self.modules['ledger'] = self.ledger
-        self.modules['pace_maker'] = self.pace_maker
-        self.modules['block_tree'] = self.block_tree
-        self.modules['leader_election'] = self.leader_election
-        self.modules['safety'] = self.safety
-        self.modules['mem_pool'] = self.mem_pool
-        self.is_leader =  True if id == 0 else False
+        self.modules[LEDGER] = self.ledger
+        self.modules[PACEMAKER] = self.pace_maker
+        self.modules[BLOCK_TREE] = self.block_tree
+        self.modules[LEADER_ELECTION] = self.leader_election
+        self.modules[SAFETY] = self.safety
+        self.modules[MEMPOOL] = self.mem_pool
         self.sysinit = True
         self.has_pending_transactions = True
         self.modules['latest_committed_payload'] = None
-        self.initalize_ledger_file()
+        self.initalize_ledger_file(config_num)
+        self.fail_config = fail_config
+        #Setting the seed for failure injections
+        if fail_config:
+            random.seed(fail_config.seed)
         
-    def initalize_ledger_file():
-        file_path = "../ledgers/ledger_" + str(id) + ".txt"
-        if not os.path.exists("../ledgers"):
-            os.makedirs("../ledgers")
+    def setup_logger(config_num,log_level):
+        if not os.path.exists(f"../logs/{config_num}"):
+            os.makedirs(f"../logs/{config_num}")
+        log_file = f"../logs/{config_num}/validator_{id}.log"
+        logging.basicConfig(level=log_level, format='%(asctime)s %(levelname)-8s %(message)s', 
+                            datefmt='%Y-%m-%d %H:%M:%S',
+                            handlers = [logging.FileHandler(log_file,'w'),
+                                        logging.StreamHandler()])
+
+
+    def initalize_ledger_file(config_num):
+        file_path = f"../ledgers/{config_num}/ledger_{str(self.modules[CONFIG]['id'])}.txt"
+        if not os.path.exists(f"../ledgers/{config_num}"):
+            os.makedirs(f"../ledgers/{config_num}")
         
         with open(file_path, 'w+') as f:
             pass
@@ -59,121 +75,193 @@ class Validator(process):
 
     def run():
         
-        await(self.exit_flag)
-        # while not self.exit_flag:
-        #     output("Starting Timer")
-        #     cur_round = self.pace_maker.current_round
-        #     timer_duration = self.pace_maker.get_round_timer()
-        #     output("Current Round", self.pace_maker.current_round)
-        #     if await(self.pace_maker.current_round == cur_round + 1):
-        #         send_ack_to_client(self.modules['latest_committed_payload'])
-        #         output("Round Progressed to ", self.pace_maker.current_round ,"No timeouts") 
-        #         pass
-        #     elif timeout(timer_duration):
-        #         # send_ack_to_client(self.modules['latest_committed_payload'])
-        #         output("Round timed out after ", timer_duration)
-        #         timeout_info = self.safety.make_timeout(self.pace_maker.current_round, self.block_tree.high_qc, self.pace_maker.last_round_tc)    
-        #         timeout_msg  = TimeOutMsg(timeout_info, self.pace_maker.last_round_tc, self.modules["block_tree"].high_commit_qc)
-        #         send(('Timeout', timeout_msg), to=self.validators)
+        while not received((MsgType.TERMINATE,)):
+            self.logging.info(f"{VALIDATOR} {id}: Starting Timer")
+            cur_round = self.pace_maker.current_round
+            timer_duration = self.pace_maker.get_round_timer()
+            self.logging.info(f"{VALIDATOR} {id}: Current Round {self.pace_maker.current_round}")
+            
+            # Handling Local Timeouts.
+            if await(self.pace_maker.current_round == cur_round + 1):
+                self.send_ack_to_client(self.modules['latest_committed_payload'])
+                self.logging.info(f"{VALIDATOR} {id}: Round Progressed to {self.pace_maker.current_round} No timeouts") 
 
+            elif timeout(timer_duration):
+                self.logging.info(f"{VALIDATOR} {id}: Round timed out after {timer_duration}")
+                self.send_ack_to_client(self.modules['latest_committed_payload'])
+                self.pacemaker_local_timeout_round()
+        
+        
+        send((MsgType.DONE, ), to=parent)
+        self.logging.info(f'{VALIDATOR} {id}: Terminating')
 
-    # def send_ack_to_client(c_message):
-    #     if c_message: pass
-    #         send(('Ack', id, c_message[0], logical_clock(),c_message[3]), to=self.cur_client)
-    #     self.modules['latest_committed_payload'] = None
+    def sign_message(msg_obj):
+        serialized_msg = pickle.dumps(msg_obj)
+        return private_key.sign(serialized_msg)
+
+    def send_ack_to_client(c_messages):
+        if c_messages and len(c_messages) > 0:
+            for c_message in c_messages:
+                client_process = self.clients[int(c_message[1][1:])]
+                send((MsgType.ACK, id, sign_message(c_message[0]), logical_clock(), c_message[3]), to=(client_process))
+        self.modules['latest_committed_payload'] = None
 
     def receive(msg = (action, sender, msg, time, txn_id), from_=p):
-        valid_msg = True#self.modules['safety'].verify_msg_signature(msg, sender)
+        valid_msg = self.modules[SAFETY].verify_msg_signature(msg, sender)
         if valid_msg:
-            #msg = pickle.loads(msg.message)
-            if action == "Client":
-                # output("From client", sender, msg)
-                # sleeptime = random.uniform(3.95, 4.05)
-                # print("sleeping for:", sleeptime, "seconds")
-                # sleep(sleeptime)
-                # print("sleeping is over")
-                self.mem_pool.add_command_to_mempool([msg, p, time, txn_id])
-                # output(obj_to_string(self.mem_pool))
+            msg = pickle.loads(msg.message)
+            if action == MsgType.CLIENT:
+                if msg != DUMMY :
+                    self.logging.info(f"{VALIDATOR} {id}: From client : {p} Msg : {msg}")
+                self.mem_pool.add_command_to_mempool([msg, sender, time, txn_id])
                 if self.sysinit:
                     self.sysinit = False
-                    self.process_new_round_event(None)
+                    self.process_new_round_event(TC(-1, [-1], None))
 
     def receive(msg=(action, sender, msg, time), from_=p):
-        valid_msg = True#self.modules['safety'].verify_msg_signature(msg, sender)
+        valid_msg =  self.modules[SAFETY].verify_msg_signature(msg, sender)
         if valid_msg:
-            #msg = pickle.loads(msg.message)
-            if action == 'Local Timeout':
-                output('Local Timeout', msg)
-            elif action == 'Propose':
-                output("Proposal received at Validator", self.modules["config"]["id"], "msg: ", obj_to_string(msg))
+            msg = pickle.loads(msg.message)
+            if action == MsgType.PROPOSE:
                 self.process_proposal_message(msg)
-            elif action == 'vote_message':
+            elif action == MsgType.VOTE:
                 self.process_vote_message(msg)
-            elif action == 'Timeout':
-                output('Timeout', msg)
-                self.process_timeout_message(msg)
+            elif action == MsgType.REMOTE_TIMEOUT:
+                self.logging.info(f'{VALIDATOR} {id}: Timeout {msg}')
+                self.process_remote_timeout_message(msg)
             else:
-                output('Default')
+                self.logging.info('Default')
         else:
-            output('Bad signature')
+            self.logging.info(f'{VALIDATOR} {id}: Bad signature')
 
 
     def process_certificate_qc(qc):
         self.block_tree.process_qc(qc)
-        # self.modules["leader_election"].update_leaders(qc)
+        self.modules[LEADER_ELECTION].update_leader(qc)
         self.pace_maker.advance_round_qc(qc)
 
+    def setattr(attr,val):
+        if attr == 'highest_vote_round': self.modules[SAFETY].set_highest_qc_round(val)
+        elif attr == 'current_round': self.modules['pace_maker']['current_round'] = val
+        elif attr == 'high_qc.round': self.modules['block_tree']['high_qc']['round'] = val
+
     def process_proposal_message(P):
+        valid_msg = self.modules[SAFETY].verify_msg_signature(P.signature, P.sender)
+        if not valid_msg:
+            return
         self.process_certificate_qc(P.block.qc)
         self.process_certificate_qc(P.high_commit_qc)
         self.pace_maker.advance_round_tc(P.last_round_tc)
-        round = self.modules["pace_maker"].current_round
-        leader = self.modules["leader_election" ].get_leader(round)
-        
+        round = self.modules[PACEMAKER].current_round
+        leader = self.modules[LEADER_ELECTION].get_leader(round)
         if P.block.round != round or P.sender != leader or P.block.author != leader: #or not self.has_pending_transactions:
-            output("No Progress at",self.modules["config"]["id"])
+            self.logging.info(f"{VALIDATOR} {id}: No Progress")
             return
         
-        self.modules["block_tree"].execute_and_insert(P.block)
+        self.modules[BLOCK_TREE].execute_and_insert(P.block)
 
         # Logic to remove transaction from non-leader validator's mempool
-
         if P.block.payload is not None and len(P.block.payload) > 0:
             self.mem_pool.update_mempool(P.block.payload)
-            # output("Mempool of validator", self.modules["config"]["id"], "after update: ", self.mem_pool.commands)
         
 
-        vote_msg = self.modules["safety"].make_vote(P.block, P.last_round_tc)
+        vote_msg = self.modules[SAFETY].make_vote(P.block, P.last_round_tc)
         if vote_msg != None:
-            next_leader = self.modules["leader_election"].get_leader(round+1)
-            send(('vote_message', id, vote_msg, logical_clock()), to=self.validators[next_leader])
+            next_leader = self.modules[LEADER_ELECTION].get_leader(round+1)
+            # send(('vote_message', id, self.modules["safety"].sign_message(vote_msg), logical_clock()), to=self.validators[next_leader])
+            self.send_message(MsgType.VOTE,vote_msg,next_leader)
 
-    def process_timeout_message(M):
-        self.process_certficate_qc(M.tmo_info.high_qc)
-        self.process_certficate_qc(M.high_commit_qc)
-        self.modules["pace_maker"].advance_round_tc(M.last_round_tc)
-        tc = self.modules["pace_maker"].process_remote_timeout(M)
+    def process_remote_timeout_message(M):
+        self.logging.info(f'{VALIDATOR} {id}: Received Timeout with cur round = {self.pace_maker.current_round}')
+        self.process_certificate_qc(M.tmo_info.high_qc)
+        self.process_certificate_qc(M.high_commit_qc)
+        self.modules[PACEMAKER].advance_round_tc(M.last_round_tc)
+
+        tc = self.pacemaker_process_remote_timeout(M)
         if tc != None:
-            self.modules["pace_maker"].advance_round(tc)
-            self.process_new_round_event(None)
+            self.logging.info(f'{VALIDATOR} {id}: TC formed')
+            self.modules[PACEMAKER].advance_round_tc(tc)
+            self.process_new_round_event(tc)
 
     def process_vote_message(vote_msg):
-        qc = self.modules["block_tree"].process_vote(vote_msg)
+        valid_msg = self.modules[SAFETY].verify_msg_signature(vote_msg.signature, vote_msg.sender)
+        if not valid_msg:
+            return
+        qc = self.modules[BLOCK_TREE].process_vote(vote_msg)
         if qc != None:
-            output('qc formed at :  ',self.modules["config"]["id"],  obj_to_string(qc))
+            logging.info(f'qc formed at :  {self.modules["config"]["id"]}')
             self.process_certificate_qc(qc)
-            self.process_new_round_event(None)
+            self.process_new_round_event(self.pace_maker.last_round_tc)
     
-    def process_new_round_event(last_tc:None):
-        if self.modules["config"]["id"] == self.modules["leader_election"].get_leader(self.modules["pace_maker"].current_round):
+    def process_new_round_event(last_tc):
+        if self.modules[CONFIG][ID] == self.modules[LEADER_ELECTION].get_leader(self.modules[PACEMAKER].current_round):
             next_txn = self.mem_pool.get_transaction()
             if next_txn is None:
                 return
-            block = self.modules["block_tree"].generate_block(self.modules["config"], next_txn, self.modules["pace_maker"].current_round)
+            block = self.modules[BLOCK_TREE].generate_block(self.modules[CONFIG], next_txn, self.modules[PACEMAKER].current_round)
             block.author = id
-            output("Validator", self.modules["config"]["id"], " Broadcasting Proposal Block: ", obj_to_string(block))
-            signature = self.modules["safety"].sign_message(block.id)
+            signature = self.modules[SAFETY].sign_message(block.id)
             proposal_msg = ProposalMsg(block, last_tc, self.block_tree.high_commit_qc,id, signature)
-            send(('Propose', id, proposal_msg, logical_clock()), to=self.validators)
+            self.send_message(MsgType.PROPOSE ,proposal_msg,'_')
         else :
-            pass# output("I am not a leader", self.modules["config"]["id"])
+            pass#
+
+    def send_message(msg_type, msg, dstn='_'):
+
+        #fault injection stub
+        if fail_config:
+            for fail_case in fail_config[0]:
+                src = self.leader_election.get_leader(self.pace_maker.current_round+1) if fail_case.src == 'leader' else fail_case.src
+                dest = self.leader_election.get_leader(self.pace_maker.current_round+1) if fail_case.dest == 'leader' else fail_case.dest
+                
+                if  ((src == id) or (src  == '_')) and (dest == dstn) and \
+                    (fail_case.round == self.pace_maker.current_round or fail_case.round == '_')\
+                     and (fail_case.msg_type == msg_type or fail_case.msg_type == '_'):
+                    probability = fail_case.prob
+                    rand_num = random.uniform(0,1)
+                    if fail_case.fail_type==FailType.Delay:
+                        if rand_num <= probability:
+                            logging.info(f"{VALIDATOR} {id}: Delaying message sending due to fault injection config {fail_case}")
+                            sleep(fail_case.val)
+                    elif fail_case.fail_type==FailType.MsgLoss:
+                        if rand_num <= probability:
+                            logging.info(f"{VALIDATOR} {id}: Dropping message due to fault injection config: {fail_case}")
+                            return
+
+
+        if dstn =='_':
+            dstn = self.validators
+        else:
+            dstn = self.validators[dstn]
+
+        send((msg_type, id, sign_message(msg), logical_clock()), to = dstn) #self.modules["safety"].sign_message(msg)
+    
+    def pacemaker_local_timeout_round():
+        timeout_info = self.safety.make_timeout(self.pace_maker.current_round, self.block_tree.high_qc, self.pace_maker.last_round_tc)    
+        timeout_msg  = TimeOutMsg(timeout_info, self.pace_maker.last_round_tc, self.modules[BLOCK_TREE].high_commit_qc)
+        self.logging.info(f'{VALIDATOR} {id}: Broadcasting Timeout round : {self.pace_maker.current_round}')
+        self.send_message(MsgType.REMOTE_TIMEOUT, timeout_msg, '_')
+    
+    def pacemaker_process_remote_timeout(timeout_msg):
+        tm_info = timeout_msg.tmo_info
+        if tm_info.round < self.pace_maker.current_round:
+            return None
+        if self.pace_maker.pending_timeouts.get(tm_info.round, None) is None:
+            self.pace_maker.pending_timeouts[tm_info.round] = set()
+        if self.pace_maker.pending_timeouts_high_qc_rounds.get(tm_info.round, None) is None:
+            self.pace_maker.pending_timeouts_high_qc_rounds[tm_info.round] = set()
+
+        if self.pace_maker.pending_timeouts_signatures.get(tm_info.round, None) is None:
+            self.pace_maker.pending_timeouts_signatures[tm_info.round]= set()
+
+        if tm_info.sender not in self.pace_maker.pending_timeouts[tm_info.round]:
+            self.pace_maker.pending_timeouts[tm_info.round].add(tm_info.sender)
+            self.pace_maker.pending_timeouts_high_qc_rounds[tm_info.round].add(tm_info.high_qc.vote_info.round)
+            self.pace_maker.pending_timeouts_signatures[tm_info.round].add(tm_info.signature)
+
+        if len(self.pace_maker.pending_timeouts[tm_info.round]) == self.modules[CONFIG]["nfaulty"] + 1:
+            self.pacemaker_local_timeout_round()
+        if len(self.pace_maker.pending_timeouts[tm_info.round]) == 2*self.modules[CONFIG]["nfaulty"] + 1:
+            return TC(tm_info.round, self.pace_maker.pending_timeouts_high_qc_rounds[tm_info.round], self.pace_maker.pending_timeouts_signatures[tm_info.round])
+        return None
+

@@ -1,49 +1,97 @@
 import sys
 import pickle
 from time import sleep
+from collections import defaultdict
+import logging
+import os
+from nacl.signing import VerifyKey
+from nacl.exceptions import BadSignatureError
+from messages import MsgType
+from constants import *
+
 
 class Client(process):
 
-    def setup(id, validators: list, public_keys: list, pvt_key):  # have to create message class
-        self.exit_flag = 0
-        self.quorum_set = set()
-        pass
+    def setup_logger(config_num, level):
+
+        if not os.path.exists(f"../logs/{config_num}"):
+            os.makedirs(f"../logs/{config_num}")
+        log_file = f"../logs/{config_num}/client_{id}.log"
+        formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
+        handler = logging.FileHandler(log_file)       
+        handler.setFormatter(formatter)
+        logger = logging.getLogger(f"client_{config_num}")
+        logger.setLevel(level)
+        logger.addHandler(handler)
+        logger.addHandler(logging.StreamHandler())
+
+        return logger
+
+    def setup(id, validators: list, public_keys: list, pvt_key, config_num, TIMEOUT, num_messages, num_faulty, parent):  
+        self.logger = self.setup_logger(config_num, logging.INFO)
+        self.logger.info(f"{CLIENT} {id}: Setup done")
+        self.quorum_flag = 0            # Termination flag which checks if sufficient valid replies (f+1) are received 
+                                        # from validators for client to agree on that transactions' commit
+        self.quorum_map = defaultdict(int)
 
     def sign_message(msg_obj):
         serialized_msg = pickle.dumps(msg_obj)
         return pvt_key.sign(serialized_msg)
 
+    def verify_msg_signature(signed_obj, sender):
+        try:
+            verify_key_bytes = public_keys[sender]
+            verify_key = VerifyKey(verify_key_bytes)
+            verify_key.verify(signed_obj)
+            return True
+        except BadSignatureError:
+            logging.error(f"{CLIENT} {id}: Bad Signature, sender : {sender}, signed message: {signed_obj}")
+            return False
+
     def run():
+        """
+        Client sends the transactions to validators and wait for quorum_flag to set. In case of a timeout, it retransmits
+        all the transactions to validators.
+        """
+        while True:
+            iter=0
+            while iter < num_messages:
+                self.txn_id = f"{id}_{iter}"
+                send((MsgType.CLIENT, id, sign_message(f"transactions_{self.txn_id}"), logical_clock(),self.txn_id), to=self.validators)
+                self.logger.info(f"{CLIENT} {id}: Message sent with txn_id: {self.txn_id}")
+                iter+=1
 
-        # num_messages = 1
-        # i=0
-        send(('Client', id, f"transactions_{id}", logical_clock(),1), to=self.validators)
-        send(('Client', id, "dummy", logical_clock(),1), to=self.validators)
-        send(('Client', id, "dummy", logical_clock(),1), to=self.validators)
-        # send(('Client', id, sign_message(f"dummy{1}"), logical_clock(),1), to=self.validators)
-        # while i < num_messages:
-        #     txn_id = id+'_'+str(i)
-        #     send(('Client', id, sign_message(f"transactions_{txn_id}"), logical_clock(),txn_id), to=self.validators)
-            # if await(len(self.quorum_set) == 2):
-            #     i+=1
-            #     output("In client run method : Acknowledgements received from validators. Proceeding to next message")
-            #     output(self.quorum_set)
-            #     self.quorum_set = set()
-            # elif timeout(5):
-            #     output("In client run method : Timed out... Retrying")
-            #     output(self.quorum_set)
-            #     self.quorum_set = set()
+            # Sending two dummy transactions at the end of the transactions list to handle last two transactions.
+            send((MsgType.CLIENT, id, sign_message(DUMMY), logical_clock(), self.txn_id), to=self.validators)
+            send((MsgType.CLIENT, id, sign_message(DUMMY), logical_clock(), self.txn_id), to=self.validators)
+            
+            if await(self.quorum_flag == 1):
+                #Await on the quorum flag to become set, if not timeout and resend client transactions to all validators.
+                self.logger.info(f'{CLIENT} {id}: Length of quorum map :{len(self.quorum_map)}')
+                for k,v in self.quorum_map.items():
+                    self.logger.info(f'{k} - {v}')
+                self.logger.info(f'{CLIENT} {id}: Processing done')
+                break          
+                # Breaking out of the infinite loop once u receive f+1 replies for all your transactions
+                                                                    
+                
+            elif timeout(TIMEOUT): # Timeout argument from setup. Client timeouts and then retransmitts requests.
+                 self.logger.info(f"{CLIENT} {id}: Run method : Timed out... Retransmitting requests")
+
+        self.logger.info(f"{CLIENT} {id}: Sending done to runner")
+        send((MsgType.DONE, ), to=parent)
         
-        # sleep(15)                                #Just to make the client wait for pending replies by validators before exiting
-        # output("Client processing done")
-        # await(exit_flag == 1)
-
     
     def receive(msg = (action, sender, message, time, txn_id), from_=p):
-        # valid_msg = self.modules['safety'].verify_msg_signature(msg, sender)
-        # if valid_msg:
-        # msg = pickle.loads(msg.message)
-        if action == "Ack":
-            output("From Validator: ", sender, message)
-            # self.txn_committed = True
-            self.quorum_set.add(sender)
+        valid_msg = self.verify_msg_signature(message, sender)
+        if valid_msg:
+            msg_extract = pickle.loads(message.message)
+            if action == MsgType.ACK:
+                self.logger.info(f"{CLIENT} {id}: From Validator: {sender}, {msg_extract}")
+                self.quorum_map[txn_id]+=1
+                self.logger.info(self.quorum_map)
+                if len(self.quorum_map) == num_messages:
+                    for k, v in self.quorum_map.items():
+                        if v < num_faulty + 1:  # Check for f + 1 in quorum_map
+                            return
+                    self.quorum_flag = 1        # Set quorum_flag to true

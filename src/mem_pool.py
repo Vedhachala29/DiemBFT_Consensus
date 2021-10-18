@@ -1,5 +1,6 @@
 from collections import deque
-
+import logging
+from constants import *
 
 class MemPool:
     def __init__(self, modules) -> None:
@@ -8,18 +9,26 @@ class MemPool:
 
     def add_command_to_mempool(self, client_command):
 
-        # Handling deduplicates by checking ledger's committed_Txns and Mem_pool 
+        # Handling deduplicates by checking ledger's committed_Txns, pending_Txns and Mem_pool
 
         txn_id = client_command[3]
-        # if txn_id in self.modules['ledger'].committed_txns:
-        #     return 
+        already_received_command = False
+        if client_command[0] != DUMMY:
+            if txn_id in self.modules[LEDGER].committed_txn_ids:
+                already_received_command = True
+ 
+            if txn_id in self.modules[LEDGER].pending_txn_ids:
+                already_received_command = True
         
-        # for item in self.commands:  
-        #     if txn_id in item:
-        #         return
-
-        # TODO : Also check in pending states?
-        self.commands.append(client_command)
+            for item in self.commands:  
+                if txn_id in item:
+                    already_received_command = True
+                    break
+        
+        if not already_received_command:
+            self.commands.append(client_command)
+        else:
+            logging.info(f"Already Received {client_command} at Validator{self.modules[CONFIG][ID]}")
 
     def is_empty(self):
         return len(self.commands) == 0
