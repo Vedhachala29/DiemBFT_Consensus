@@ -84,7 +84,7 @@ class Validator(process):
             # Handling Local Timeouts.
             if await(self.pace_maker.current_round == cur_round + 1):
                 self.send_ack_to_client(self.modules['latest_committed_payload'])
-                self.logging.info(f"{VALIDATOR} {id}: Round Progressed to {self.pace_maker.current_round} No timeouts") 
+                self.logging.info(f"{VALIDATOR} {id}: Round Progressed to {self.pace_maker.current_round}") 
 
             elif timeout(timer_duration):
                 self.logging.info(f"{VALIDATOR} {id}: Round timed out after {timer_duration}")
@@ -142,7 +142,7 @@ class Validator(process):
 
     def setattr(attr,val):
         if attr == 'highest_vote_round': self.modules[SAFETY].set_highest_qc_round(val)
-        elif attr == 'current_round': self.modules['pace_maker']['current_round'] = val
+        elif attr == 'current_round': self.pace_maker.current_round = val
         elif attr == 'high_qc.round': self.modules['block_tree']['high_qc']['round'] = val
 
     def process_proposal_message(P):
@@ -172,7 +172,7 @@ class Validator(process):
             self.send_message(MsgType.VOTE,vote_msg,next_leader)
 
     def process_remote_timeout_message(M):
-        self.logging.info(f'{VALIDATOR} {id}: Received Timeout with cur round = {self.pace_maker.current_round}')
+        self.logging.info(f'{VALIDATOR} {id}: Received Timeout from Validator {M.tmo_info.sender}')
         self.process_certificate_qc(M.tmo_info.high_qc)
         self.process_certificate_qc(M.high_commit_qc)
         self.modules[PACEMAKER].advance_round_tc(M.last_round_tc)
@@ -208,13 +208,15 @@ class Validator(process):
 
     def send_message(msg_type, msg, dstn='_'):
 
+        drop_set = set()
+        delay_set = set()
+        sleep_val = 0
         #fault injection stub
         if fail_config:
             for fail_case in fail_config[0]:
                 src = self.leader_election.get_leader(self.pace_maker.current_round+1) if fail_case.src == 'leader' else fail_case.src
-                dest = self.leader_election.get_leader(self.pace_maker.current_round+1) if fail_case.dest == 'leader' else fail_case.dest
-                
-                if  ((src == id) or (src  == '_')) and (dest == dstn) and \
+                dest = self.leader_election.get_leader(self.pace_maker.current_round+1) if fail_case.dest == 'leader' else fail_case.dest    
+                if ((src == id) or (src  == '_')) and ((dest == dstn) or (dstn == '_')) and \
                     (fail_case.round == self.pace_maker.current_round or fail_case.round == '_')\
                      and (fail_case.msg_type == msg_type or fail_case.msg_type == '_'):
                     probability = fail_case.prob
@@ -222,20 +224,32 @@ class Validator(process):
                     if fail_case.fail_type==FailType.Delay:
                         if rand_num <= probability:
                             logging.info(f"{VALIDATOR} {id}: Delaying message sending due to fault injection config {fail_case}")
-                            sleep(fail_case.val)
+                            if dest == '_':
+                                delay_set = set(range(len(self.validators)))
+                            else:
+                                delay_set.add(dest)
+                            sleep_val = fail_case.val
+                            
                     elif fail_case.fail_type==FailType.MsgLoss:
                         if rand_num <= probability:
                             logging.info(f"{VALIDATOR} {id}: Dropping message due to fault injection config: {fail_case}")
-                            return
+                            if dest == '_':
+                                drop_set = set(range(len(self.validators)))
+                            else:
+                                drop_set.add(dest)
 
-
-        if dstn =='_':
-            dstn = self.validators
-        else:
-            dstn = self.validators[dstn]
-
-        send((msg_type, id, sign_message(msg), logical_clock()), to = dstn) #self.modules["safety"].sign_message(msg)
+        if dstn == '_':
+            for i in range(len(self.validators)):
+                if (i not in drop_set) and (i not in delay_set):
+                    send((msg_type, id, sign_message(msg), logical_clock()), to = self.validators[i])
+        elif (dstn not in drop_set) and (dstn not in delay_set):
+            send((msg_type, id, sign_message(msg), logical_clock()), to = self.validators[dstn]) #self.modules["safety"].sign_message(msg)
     
+        if delay_set:
+            sleep(sleep_val)
+            for i in delay_set:
+                send((msg_type, id, sign_message(msg), logical_clock()), to = self.validators[i])
+
     def pacemaker_local_timeout_round():
         timeout_info = self.safety.make_timeout(self.pace_maker.current_round, self.block_tree.high_qc, self.pace_maker.last_round_tc)    
         timeout_msg  = TimeOutMsg(timeout_info, self.pace_maker.last_round_tc, self.modules[BLOCK_TREE].high_commit_qc)

@@ -35,4 +35,24 @@ class ValidatorFI(process, Validator):
                         return
         super().process_new_round_event(last_tc)
 
-    # def process_pro
+    def send_message(msg_type, msg, dstn='_'):
+
+        logging.info("In validator fi send message")
+
+        #fault injection stub
+        if self.fail_config:
+            for fail_case in self.fail_config[0]:
+                src = self.leader_election.get_leader(self.pace_maker.current_round+1) if fail_case.src == 'leader' else fail_case.src
+                dest = self.leader_election.get_leader(self.pace_maker.current_round+1) if fail_case.dest == 'leader' else fail_case.dest
+                if  ((src == id) or (src  == '_')) and (dest == dstn) and \
+                    (fail_case.round == self.pace_maker.current_round or fail_case.round == '_')\
+                     and (fail_case.msg_type == msg_type or fail_case.msg_type == '_'):
+                    probability = fail_case.prob
+                    rand_num = random.uniform(0,1)
+                    if fail_case.fail_type == FailType.SetAttr:
+                        if rand_num <= probability:
+                            logging.info(f"Validator {id}: Setting attribute {fail_case.attr} : {fail_case.val} for fault injection")
+                            super().setattr(fail_case.attr,fail_case.val)
+
+        super().send_message(msg_type, msg, dstn)
+

@@ -30,11 +30,13 @@ class Ledger:
         Updates the LRU commited transactions
         """
         txns = []
+        tids = set()
         while self.speculated_state.get(id, None) is not None:
             state = self.speculated_state.pop(id)
-            if state["payload"] and len(state["payload"]) and state["payload"][0] != DUMMY:
+            if state["payload"] and len(state["payload"]) and state["payload"][3] not in tids and state["payload"][3] not in self.committed_txn_ids and state["payload"][0] != DUMMY:
                 self.LRU_commited_cache[id] = state["payload"]
                 txns.insert(0,state["payload"])
+                tids.add(state["payload"][3])
             id = state["parent_id"]
 
         self.modules_map['latest_committed_payload'] = txns

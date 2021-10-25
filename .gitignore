@@ -3,3 +3,6 @@ _pycache_/
 ledger*.txt
 log*.txt
 client*.log
+validator*.log
+.DS_Store
+runner.log
