@@ -4,7 +4,7 @@ from logger_util import LOGGER
 
 class LeaderElection:
 
-    def __init__(self, validator_id, replicas, ledger, pacemaker, window_size, exclude_size):
+    def __init__(self, validator_id, replicas, ledger, pacemaker, window_size, exclude_size, scenario):
         self.validator = replicas[validator_id]
         self.validator_id = validator_id
         '''validators; // The list of current validators'''
@@ -18,21 +18,24 @@ class LeaderElection:
         '''reputation leaders; // Map from round numbers to leaders elected due to the reputation scheme'''
         self.reputation_leaders = dict()
 
+        self.scenario = scenario
+
     '''Function get leader(round)'''
     def get_leader(self, round):
-        LOGGER.log('LeaderElection: get_leader', round)
-        '''if <round, leader> ∈ reputation leaders then'''
-        if round in self.reputation_leaders:
-            LOGGER.log('LeaderElection: get_leader: returns from reputated map',
-                        self.reputation_leaders[round])
-            LOGGER.log("Leader election is Done successfully", None)
-            '''return leader // Reputation-based leader'''
-            return self.reputation_leaders[round]
-        LOGGER.log('LeaderElection: get_leader: returns by round robin', ((
-            round)//2) % len(self.replicas), self.replicas[((round)//2) % len(self.replicas)])
-        LOGGER.log("Leader election is Done successfully", None)
-        '''return validators[floor(round//2) mod |validators|] // Round-robin leader (two rounds per leader)'''
-        return self.replicas[((round)//2) % len(self.replicas)]
+        # LOGGER.log('LeaderElection: get_leader', round)
+        # '''if <round, leader> ∈ reputation leaders then'''
+        # if round in self.reputation_leaders:
+        #     LOGGER.log('LeaderElection: get_leader: returns from reputated map',
+        #                 self.reputation_leaders[round])
+        #     LOGGER.log("Leader election is Done successfully", None)
+        #     '''return leader // Reputation-based leader'''
+        #     return self.reputation_leaders[round]
+        # LOGGER.log('LeaderElection: get_leader: returns by round robin', ((
+        #     round)//2) % len(self.replicas), self.replicas[((round)//2) % len(self.replicas)])
+        # LOGGER.log("Leader election is Done successfully", None)
+        # '''return validators[floor(round//2) mod |validators|] // Round-robin leader (two rounds per leader)'''
+        # return self.replicas[((round)//2) % len(self.replicas)]
+        return scenario[round].leader
 
     '''Procedure update leaders(qc)'''
     def update_leaders(self, qc):

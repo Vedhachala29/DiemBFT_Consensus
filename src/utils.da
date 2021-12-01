@@ -29,3 +29,13 @@ def todict(obj):
         return [todict(elem) for elem in obj]
     else:
         return obj
+
+def get_twin(twins, id):
+    if id in twins:
+        return twins[id]
+    for v1,v2 in twins:
+        if id == v1:
+            return v2
+        elif id == v2:
+            return v1
+    return None

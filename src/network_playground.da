@@ -1,0 +1,64 @@
+from object_types import MsgType
+
+class NetworkPlayground(Process):
+    def setup(config, config_id: int, scenario, validators: int):
+        self.last_executed_round = {}
+        self.last_committed_round = {}
+        self.txn_commit_order = {} # safety check
+        self.nocommit_pool = ()
+
+    def run():
+        pass
+    def receive(msg=('NetworkPlayground', source, round, msg, MsgType), from_=p):
+        destination = evaluate_destination(source, round, MsgType)
+        if len(destination):
+            send((MsgType, msg, p), to=destination)
+
+        last_executed_round[source] = round
+        check_no_commit_pool(source)
+        if round >= config.max_rounds:
+            check_process_completion()
+
+    def receive(msg=('CommitNotification', source, round, txns), from_=p):
+        last_commited_round[source] = round
+        update_no_commit_pool(round)
+        
+
+    def evaluate_destination(source, round, MsgType):
+        partition = []
+        intended_destination = []
+        PLF_list = scenario[round]
+        for ipartition, failtype in PLF_list:
+            if source in ipartition and ((not failtype) or failtype == MsgType):
+                partition = ipartition
+        if MsgType in [MsgType.Proposal, MsgType.Timeout]:
+            intended_destination = list(range(len(validators)))
+        if MsgType == MsgType.Vote:
+            next_leader = scenario[round+1]['leader']
+            intended_destination = [next_leader]
+            if next_leader in config['twin']:
+                intended_destination.append(config['twin'][next_leader])
+        
+        destination = []
+        for validator_id in intended_destination:
+            if validator_id in partition:
+                destination.append(validators[validator_id])
+            
+        return destination
+
+    def check_no_commit_pool(source):
+        
+        if last_executed_round.get(source, -1) - last_commited_round.get(source, -1) >= config.MIN_IDLE_ROUNDS:
+            nocommit_pool.add(source)
+        if len(nocommit_pool) == 2*config['nfaulty']+1:
+            ''' Liveliness Violation '''
+            pass
+    
+    def update_no_commit_pool(source):
+        if source not in nocommit_pool:
+            return
+        if last_executed_round.get(source, -1) - last_commited_round.get(source, -1) < config.MIN_IDLE_ROUNDS:
+            nocommit_pool.remove(source)
+
+    
+

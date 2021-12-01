@@ -15,7 +15,7 @@ from safety import Safety
 
 class Validator (process):
 
-    def setup(config, config_id: int, validator_id: int, replicas: list, clients: list, private_key, public_keys_validators, public_keys_clients):
+    def setup(config, config_id: int, validator_id: int, replicas: list, clients: list, private_key, public_keys_validators, public_keys_clients, scenario, NP):
 
         LOGGER.replicas = replicas
         LOGGER.process_id = "validator_" + str(validator_id)
@@ -40,7 +40,7 @@ class Validator (process):
             validator_id, replicas, self.blocktree, self.safety, config['nfaulty'], config['delta'], send_timeout_msg)
         self.mempool = MemPool(validator_id)
         self.leader_election = LeaderElection(
-            validator_id, replicas, self.ledger, self.pacemaker, config['window_size'], config['exclude_size'])
+            validator_id, replicas, self.ledger, self.pacemaker, config['window_size'], config['exclude_size'], scenario)
 
         Cryptography.private_key = self.private_key
         Cryptography.replicas = self.replicas
@@ -65,7 +65,7 @@ class Validator (process):
     # Broadcast the timeout message
     def send_timeout_msg(timeout_msg):
         LOGGER.log('Validator: send_timeout_message', timeout_msg)
-        send(('Timeout', timeout_msg), to=self.replicas)
+        send_message_to_playground(MsgType.Timeout, timeout_msg)
         LOGGER.log_event('Sent', 'Timeout', timeout_msg, self.replicas)
 
     '''Procedure start event processing(M)'''
@@ -146,14 +146,14 @@ class Validator (process):
                 high_commit_qc=self.blocktree.high_commit_qc,
                 validator=validator_id
             )
-            send(('Proposal', proposal_msg), to=self.replicas)
+            send_message_to_playground(MsgType.Proposal, proposal_msg)
             LOGGER.log_event("Sent", "Proposal",
                              proposal_msg, self.replicas)
 
         LOGGER.log("Validator: process_new_round_event ends", None)
 
     '''Procedure process proposal msg(P)'''
-    def receive(msg=('Proposal', proposal_msg), from_=p):
+    def receive(msg=(MsgType.Proposal, proposal_msg), from_=p):
         LOGGER.log_event("Received", "Proposal", proposal_msg, p)
 
         signature_verified = Cryptography.get_verified_message(
@@ -205,16 +205,14 @@ class Validator (process):
             '''if vote msg != ⊥ then
                     send vote msg to LeaderElection.get leader(current round + 1)'''
             if vote_msg is not None:
-                next_leader = self.leader_election.get_leader(round + 1)
-                send(('Vote', vote_msg),
-                     to=next_leader)
+                send_message_to_playground(MsgType.Vote, vote_msg)
                 LOGGER.log_event("Sent", "Vote", vote_msg, next_leader)
 
         else:
             LOGGER.log_action("Verified ProposalMsg signature", False)
 
     '''Procedure process vote msg(M)'''
-    def receive(msg=('Vote', vote_msg), from_=p):
+    def receive(msg=(MsgType.Vote, vote_msg), from_=p):
         LOGGER.log_event("Received", "Vote", vote_msg, p)
 
         signature_verified = Cryptography.get_verified_message(
@@ -238,7 +236,7 @@ class Validator (process):
         LOGGER.log("Received VoteMsg ends g", None)
 
     '''Procedure process timeout msg(M)'''
-    def receive(msg=('Timeout', timeout_msg), from_=p):
+    def receive(msg=(MsgType.Timeout, timeout_msg), from_=p):
         LOGGER.log_event("Received", "Timeout", timeout_msg, p)
 
         signature_verified = Cryptography.get_verified_message(
@@ -288,6 +286,9 @@ class Validator (process):
                 self.should_start_new_round = False
         else:
             LOGGER.log_action("Verified Client Request signature", False)
+
+    def send_message_to_playground(MsgType, msg):
+        send(('NetworkPlayground', self.validator_id, self.pacemaker.current_round, msg, MsgType))
 
 
 class ValidatorFI (process, Validator):

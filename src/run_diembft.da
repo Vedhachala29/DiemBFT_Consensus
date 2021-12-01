@@ -8,11 +8,12 @@ from client import Client
 from config import configs
 from cryptography import Cryptography
 from validator import ValidatorFI
-
+from network_playground import NetworkPlayground
+import scenario_generator
 
 class RunDiemBFT(process):
 
-    def setup(config, config_id):
+    def setup(config, config_id, scenario):
         self.nvalidators = int(config['nvalidators'])
         self.nclients = int(config['nclients'])
         self.nfaulty = int(config['nfaulty'])
@@ -27,13 +28,21 @@ class RunDiemBFT(process):
         os.makedirs('../logs/config' + str(config_id))
         os.makedirs('../ledgers/config' + str(config_id))
 
-        validators = new(ValidatorFI, num=nvalidators)
-        clients = new(Client, num=nclients)
+        validators = list(new(ValidatorFI, num=(nvalidators+nfaulty)))
+        clients = list(new(Client, num=nclients))
+        NP = new(NetworkPlayground)
+        setup(NP, (config, config_id, scenario, validators))
 
-        for v in validators:
+        for i in range(nvalidators):
+            v = validators[i]
             private_key, public_key = Cryptography.generate_key()
             private_keys_validators[v] = private_key
             public_keys_validators[v] = public_key
+            if i in config['twin']:
+                twin_id = config['twin'][i]
+                t = validators[twin_id]
+                private_keys_validators[t] = private_key
+                public_keys_validators[t] = public_key
 
         for c in clients:
             private_key, public_key = Cryptography.generate_key()
@@ -41,13 +50,14 @@ class RunDiemBFT(process):
             public_keys_clients[c] = public_key
 
         for i, v in enumerate(validators):
-            setup({v}, (config, config_id, i, list(validators), list(clients),
-                        private_keys_validators[v], public_keys_validators, public_keys_clients))
+            setup({v}, (config, config_id, i, validators, clients,
+                        private_keys_validators[v], public_keys_validators, public_keys_clients, scenario, NP))
 
         for i, c in enumerate(clients):
-            setup({c}, (config, config_id, i, list(validators),
+            setup({c}, (config, config_id, i, validators,
                         private_keys_clients[c], public_keys_validators))
 
+        start(NP)
         start(validators)
         start(clients)
 
@@ -82,7 +92,12 @@ def main():
             output("The provided config", config,
                    "is not valid. Skipping this config.")
             continue
-        p = new(RunDiemBFT)
-        setup(p, (config, config_id))
-        start(p)
+        ''' Log: config_id - Starting Scenario Generation  '''
+        scenario_generator.write_scenarios_to_file(config)
+        ''' Log: config_id - Scenario Generation Completed '''
+        scenarios = [] # read from the file
+        for scenario in scenarios:
+            p = new(RunDiemBFT)
+            setup(p, (config, config_id, scenario))
+            start(p)
         config_id += 1
