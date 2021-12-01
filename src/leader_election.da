@@ -1,41 +1,100 @@
 import random
-import math
-from constants import *
+from logger_util import LOGGER
+
 
 class LeaderElection:
-    def __init__(self, modules_map, window_size:int, exclude_size: int) -> None:
-        self.modules_map = modules_map
-        self.validators = self.modules_map['validators_list']
+
+    def __init__(self, validator_id, replicas, ledger, pacemaker, window_size, exclude_size):
+        self.validator = replicas[validator_id]
+        self.validator_id = validator_id
+        '''validators; // The list of current validators'''
+        self.replicas = replicas
+        self.ledger = ledger
+        self.pacemaker = pacemaker
+        '''window size; // A parameter for the leader reputation algorithm'''
         self.window_size = window_size
+        '''exclude size; // Between f and 2f, number of excluded authors of last committed blocks'''
         self.exclude_size = exclude_size
-        self.reputation_leaders = {}
+        '''reputation leaders; // Map from round numbers to leaders elected due to the reputation scheme'''
+        self.reputation_leaders = dict()
 
-    def election_reputation_leader(self, QC):
-        active_validators = set()
-        last_authors = set()                                            #Check if this is an ordered set or a set or list
-        current_qc = QC
-        iter=0
-        while iter < self.window_size and len(last_authors) < self.exclude_size and current_qc.blockid:
-            current_block = self.modules_map[LEDGER].committed_block(current_qc.vote_info.parent_id)
-            block_author =  current_block.author
-            if iter < self.window_size :
-                active_validators.add(current_qc.vote_info.id)            #current_qc.signatures.signers()
-            if len(last_authors) < self.exclude_size:
-                last_authors.add(block_author)
-            current_qc = current_block.qc
-            iter=iter+1
-        return random.choice(tuple(active_validators))                              # Random choice from the tuple of active_validators
+    '''Function get leader(round)'''
+    def get_leader(self, round):
+        LOGGER.log('LeaderElection: get_leader', round)
+        '''if <round, leader> ∈ reputation leaders then'''
+        if round in self.reputation_leaders:
+            LOGGER.log('LeaderElection: get_leader: returns from reputated map',
+                        self.reputation_leaders[round])
+            LOGGER.log("Leader election is Done successfully", None)
+            '''return leader // Reputation-based leader'''
+            return self.reputation_leaders[round]
+        LOGGER.log('LeaderElection: get_leader: returns by round robin', ((
+            round)//2) % len(self.replicas), self.replicas[((round)//2) % len(self.replicas)])
+        LOGGER.log("Leader election is Done successfully", None)
+        '''return validators[floor(round//2) mod |validators|] // Round-robin leader (two rounds per leader)'''
+        return self.replicas[((round)//2) % len(self.replicas)]
 
-    def update_leader(self, QC):
-        if not QC or not QC.vote_info:
+    '''Procedure update leaders(qc)'''
+    def update_leaders(self, qc):
+        LOGGER.log('LeaderElection: update_leaders', qc)
+        if qc is None:
             return
-        extended_round = QC.vote_info.parent_round
-        qc_round = QC.vote_info.round
-        current_round = self.modules_map[PACEMAKER].current_round
+        '''extended round ← qc.vote info.parent round'''
+        extended_round = qc.vote_info.parent_round
+        '''qc round ← qc.vote info.round'''
+        qc_round = qc.vote_info.round
+        '''current round ← PaceMaker.current round'''
+        current_round = self.pacemaker.current_round
+        '''if extended round + 1 = qc round ∧ qc round + 1 = current round then'''
+        if extended_round + 1 == qc_round and qc_round + 1 == current_round:
+            '''reputation leaders[current round + 1] ← elect reputation leader(qc)'''
+            self.reputation_leaders[current_round +
+                                    1] = self.elect_reputation_leader(qc)
+        LOGGER.log('LeaderElection: update_leaders done', qc)
 
-    def get_leader(self, round:int):
-        if round in self.reputation_leaders and self.reputation_leaders[round] is not None:
-           return self.reputation_leaders[round] # check what is returned
-        else:
-            return math.floor(round) % len(self.validators)
-    
+    '''Function elect reputation leader(qc)'''
+    def elect_reputation_leader(self, qc):
+        LOGGER.log('LeaderElection: elect_reputation_leader', qc)
+        '''active validators ← ∅ // validators that signed the last window size committed blocks'''
+        active_validators = set()
+        '''last authors ← ∅ // ordered set of authors of last exclude size committed blocks'''
+        last_authors = set()
+        '''current qc ← qc'''
+        current_qc = qc
+        '''for i = 0; i < window size ∨ |last authors| < exclude size; i ← i + 1 do'''
+        i = 0
+        while(i < self.window_size or len(last_authors) < self.exclude_size):
+            if current_qc is None:
+                break
+            '''if i < window size then'''
+            if i < self.window_size:
+                '''active validators ← active validators ∪ current qc.signatures.signers()
+                // |current qc.signatures.signers()| ≥ 2f + 1'''
+                active_validators = active_validators.union(
+                    current_qc.signers)
+            '''current block ← Ledger.committed block(current qc.vote info.parent id)'''
+            current_block = self.ledger.committed_block(
+                current_qc.vote_info.parent_id)
+            if current_block is None:
+                break
+            '''block author ← current block.author'''
+            block_author = current_block.author
+            '''if |last authors| < exclude size then'''
+            if len(last_authors) < self.exclude_size:
+                '''last authors ← last authors ∪ {block author}'''
+                last_authors = last_authors.union({block_author})
+            '''current qc ← current block.qc'''
+            current_qc = current_block.qc
+            i = i + 1
+        '''active validators ← active validators \ last authors // contains at least 1 validator'''
+        #Select active validators which were not leaders recently
+        active_validators = active_validators.difference(
+            last_authors)
+
+        #Use consistent random seed across all validators, to deterministically select the same leader  
+        '''return active validators.pick one(seed ← qc.voteinfo.round)'''
+        random.seed(qc.vote_info.round)
+        leader_indx = random.choice(list(active_validators))
+        LOGGER.log('LeaderElection: elect_reputation_leader: returns randomly seeded leader index and corresponding leader as',
+                    leader_indx, self.replicas[leader_indx])
+        return self.replicas[leader_indx]

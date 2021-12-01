@@ -1,0 +1,139 @@
+from cryptography import Cryptography
+from logger_util import LOGGER
+
+
+class Ledger:
+
+    def __init__(self, config_id, validator_id, id_block, recently_committed_block_ids, request_cache):
+        self.validator_id = validator_id
+        self.config_id = config_id
+        self.state_id = 0
+        self.block_id_to_state_id = dict()
+        self.recently_committed_block_ids = recently_committed_block_ids
+        self.speculate_tree = dict()
+        self.commited = dict()
+        self.id_to_block = id_block
+        self.request_cache = request_cache
+        self.filename = "validator_" + str(validator_id) + ".ledger"
+        fp = open('../ledgers/config' + str(config_id) +
+                  "/" + self.filename, 'w')
+        fp.close()
+
+    # This funtion returns a state_id for a block which is calculated by appending transactions to the state_id of prev_block and hashing the result
+    def get_state_id(self, prev_block_id=None, block_id=None, txns=None):
+        LOGGER.log('Ledger: get_state_id', prev_block_id, block_id, txns)
+        if prev_block_id == None or prev_block_id not in self.block_id_to_state_id:
+            new_state_id = Cryptography.hash(txns)
+            LOGGER.log('Ledger: get_state_id: returns', new_state_id)
+            return new_state_id
+
+        parent_state_id = self.block_id_to_state_id[prev_block_id]
+        new_state_id = Cryptography.hash(parent_state_id, txns)
+        LOGGER.log('Ledger: get_state_id: returns', new_state_id)
+        return new_state_id
+
+
+    '''speculate(prev block id, block id, txns) // apply txns speculatively'''
+    # This function generates a speculate tree by taking in the previous block id and current block id
+    def speculate(self, prev_block_id, block_id, txns):
+        LOGGER.log('Ledger: speculate', prev_block_id, block_id, txns)
+        if prev_block_id == None:
+            self.speculate_tree[block_id] = []
+        elif prev_block_id not in self.speculate_tree:
+            LOGGER.log("Ledger: parent block does not exist", None)
+            return
+        else:
+            self.speculate_tree[prev_block_id].append(block_id)
+            self.speculate_tree[block_id] = []
+
+        # It calculates the state_id for the current block which is then mapped to the current block 
+        state_id = self.get_state_id(prev_block_id, block_id, txns)
+        self.block_id_to_state_id[block_id] = state_id
+
+    '''pending state(block id) // find the pending state for the given block id or ⊥ if not present'''
+    # When given a block_id this funtion returns its pending state
+    def pending_state(self, block_id):
+        LOGGER.log('Ledger: pending_state', block_id)
+        if block_id in self.block_id_to_state_id:
+            pending_state = self.block_id_to_state_id[block_id]
+            LOGGER.log('Ledger: pending_state: returns', pending_state)
+            return pending_state
+        LOGGER.log('Ledger: pending_state: returns', None)
+        return None
+
+    '''commit(block id) // commit the pending prefix of the given block id and prune other branches'''
+    # This will commit the block which is specified and append the commited transactions to the Ledger file of the corresponding Validator
+    def commit(self, block_id):
+        LOGGER.log('Ledger: commit', block_id)
+        if block_id not in self.id_to_block:
+            LOGGER.log('Ledger: commit: did not commit', None)
+            return
+        recently_commited = set()
+        current_block_to_commit = self.id_to_block[block_id]
+        stack = []
+        # This helps in commiting the whole branch of uncommited blocks which extend the current block and have the current block as the leaf 
+        while(current_block_to_commit.id not in self.commited):
+            if current_block_to_commit.id not in self.id_to_block:
+                break
+            stack.append((current_block_to_commit.id,
+                          current_block_to_commit.payload))
+            recently_commited.add(current_block_to_commit.id)
+
+            # Now check if the current block has a QC
+            if current_block_to_commit.qc == None or current_block_to_commit.qc.vote_info.id not in self.id_to_block:
+                break
+            current_block_to_commit = self.id_to_block[current_block_to_commit.qc.vote_info.id]
+
+        fp = open('../ledgers/config' + str(self.config_id) +
+                  "/" + self.filename, 'a+')
+        while(stack):
+            block_id, payload = stack.pop()
+            self.commited[block_id] = payload
+            for txn in payload:
+                if txn['req_id'] in self.request_cache:
+                    LOGGER.log(
+                        'Ledger: commit skipping txn as already committed', txn)
+                    continue
+                else:
+                    LOGGER.log('Ledger: commit committing a txn', txn)
+                    fp.write(txn['command']+'\n')
+            self.recently_committed_block_ids.append(block_id)
+            LOGGER.log_action('Committed blocks to ledger',
+                               self.recently_committed_block_ids)
+        fp.close()
+
+        LOGGER.log('Ledger: commit: ends', None)
+
+        # Discarding the speculated branches that fork from ancestors of the commited block -- Pruning of the speculate tree
+        if block_id not in self.id_to_block:
+            return
+        block = self.id_to_block[block_id]
+        prev_block_qc = block.qc
+        if prev_block_qc != None:
+            prev_block_id = prev_block_qc.vote_info.id
+            if prev_block_id in self.speculate_tree:
+                for i in self.speculate_tree[prev_block_id]:
+                    if i != block_id and i in self.speculate_tree:
+                        del self.speculate_tree[i]
+                del self.speculate_tree[prev_block_id]
+
+        # This helps in pruning the speculate tree if current commit call has commited multiple blocks since the current block will commit all the uncommited blocks which will reach the current block
+        for i in self.recently_committed_block_ids:
+            if i == block_id:
+                continue
+            if i in self.speculate_tree:
+                for j in self.speculate_tree[i]:
+                    if j in self.speculate_tree and j != block_id:
+                        del self.speculate_tree[j]
+                del self.speculate_tree[i]
+
+    '''committed block(block id) // returns a committed block given its id'''
+    # This function sees whether the block_id is commited or not in it local cache and returns the corresponding block if it has been commited already
+    def committed_block(self, block_id):
+        LOGGER.log('Ledger: committed_block', block_id)
+        if block_id in self.commited:
+            commited_block = self.id_to_block[block_id]
+            LOGGER.log('Ledger: committed_block: returns', commited_block)
+            return commited_block
+        LOGGER.log('Ledger: committed_block: returns', None)
+        return None

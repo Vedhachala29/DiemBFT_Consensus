@@ -1,8 +1,5 @@
 _pycache_/
 *.py[cod]
-ledger*.txt
-log*.txt
-client*.log
-validator*.log
+ledgers/
+logs/
 .DS_Store
-runner.log

@@ -1,0 +1,88 @@
+import os
+import shutil
+import sys
+
+sys.path.append('../config')
+
+from client import Client
+from config import configs
+from cryptography import Cryptography
+from validator import ValidatorFI
+
+
+class RunDiemBFT(process):
+
+    def setup(config, config_id):
+        self.nvalidators = int(config['nvalidators'])
+        self.nclients = int(config['nclients'])
+        self.nfaulty = int(config['nfaulty'])
+
+    def run():
+
+        private_keys_validators = {}
+        public_keys_validators = {}
+        private_keys_clients = {}
+        public_keys_clients = {}
+
+        os.makedirs('../logs/config' + str(config_id))
+        os.makedirs('../ledgers/config' + str(config_id))
+
+        validators = new(ValidatorFI, num=nvalidators)
+        clients = new(Client, num=nclients)
+
+        for v in validators:
+            private_key, public_key = Cryptography.generate_key()
+            private_keys_validators[v] = private_key
+            public_keys_validators[v] = public_key
+
+        for c in clients:
+            private_key, public_key = Cryptography.generate_key()
+            private_keys_clients[c] = private_key
+            public_keys_clients[c] = public_key
+
+        for i, v in enumerate(validators):
+            setup({v}, (config, config_id, i, list(validators), list(clients),
+                        private_keys_validators[v], public_keys_validators, public_keys_clients))
+
+        for i, c in enumerate(clients):
+            setup({c}, (config, config_id, i, list(validators),
+                        private_keys_clients[c], public_keys_validators))
+
+        start(validators)
+        start(clients)
+
+        await(each(c in clients, has=received(('Done',), from_=c)))
+        output("All clients done, informing all validators.", config_id)
+        send(('Done',), to=validators)
+
+
+def is_config_valid(config):
+    if int(config['nvalidators']) < (3 * int(config['nfaulty']) + 1):
+        print(
+            "Number of validators should be more than thrice of number of faulty validators.")
+        return False
+    if (int(config['nfaulty']) > int(config['exclude_size'])) or (int(config['exclude_size']) > 2 * int(config['nfaulty'])):
+        print(
+            "Exlude size should be between nfaulty and 2*nfaulty")
+        return False
+    return True
+
+
+def main():
+
+    if os.path.exists('../logs/') and os.path.isdir('../logs/'):
+        shutil.rmtree('../logs/')
+
+    if os.path.exists('../ledgers/') and os.path.isdir('../ledgers/'):
+        shutil.rmtree('../ledgers/')
+
+    config_id = 0
+    for config in configs:
+        if not is_config_valid(config):
+            output("The provided config", config,
+                   "is not valid. Skipping this config.")
+            continue
+        p = new(RunDiemBFT)
+        setup(p, (config, config_id))
+        start(p)
+        config_id += 1

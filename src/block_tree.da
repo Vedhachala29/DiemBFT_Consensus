@@ -1,0 +1,172 @@
+from cryptography import Cryptography
+from logger_util import LOGGER
+from object_types import QC, Block
+from utils import get_qc_with_max_round
+
+
+class BlockTree:
+    def __init__(self, validator_id, replicas, ledger, nfaulty, id_block):
+        '''
+        pending block tree; // tree of blocks pending commitment
+        pending votes; // collected votes per block indexed by their LedgerInfo hash
+        high qc; // highest known QC
+        high commit qc; // highest QC that serves as a commit certificate
+        '''
+        self.pending_block_tree = dict()
+        self.pending_votes = dict()
+        self.high_qc = None
+        self.high_commit_qc = None
+
+        self.pending_signers = dict()
+
+        self.validator = replicas[validator_id]
+        self.validator_id = validator_id
+        self.ledger = ledger
+        self.f = nfaulty
+        self.id_block = id_block
+
+    '''Procedure execute and insert(b)'''
+    # This function inserts the given block into the Ledger's speculate tree and also into pending block tree as well
+
+    def execute_and_insert(self, block):
+        LOGGER.log('BlockTree: execute_and_insert', block)
+        self.id_block[block.id] = block
+        if block.qc is None:
+            '''Ledger.speculate(b.qc.block id, b.id, b.payload)'''
+            self.ledger.speculate(None, block.id, [
+                txn['command'] for txn in block.payload])
+
+            '''pending block tree.add(b)'''
+            self.pending_block_tree[block] = []
+        else:
+            '''Ledger.speculate(b.qc.block id, b.id, b.payload)'''
+            self.ledger.speculate(block.qc.vote_info.id, block.id, [
+                txn['command'] for txn in block.payload])
+
+            '''pending block tree.add(b)'''
+            if block.qc.vote_info.id not in self.id_block or self.id_block[block.qc.vote_info.id] not in self.pending_block_tree:
+                # print("Not in the self.pendingtree", block.qc.vote_info.id)
+                LOGGER.log(
+                    'BlockTree: execute_and_insert ends without adding anything', block)
+                return
+            self.pending_block_tree[self.id_block[block.qc.vote_info.id]].append(
+                block)
+            self.pending_block_tree[block] = []
+        LOGGER.log('BlockTree: execute_and_insert ends', block)
+
+    # This will generate a block with the given parameters
+    def generate_block(self, txns, current_round):
+        LOGGER.log('BlockTree: generate_block', txns, current_round)
+        qc = self.high_qc
+        if qc is None:
+            id = Cryptography.hash(self.validator_id, current_round,
+                                   txns)
+        else:
+            id = Cryptography.hash(self.validator_id, current_round,
+                                   txns, qc.vote_info.id, qc.signatures)
+        '''return Block h
+            author ← u,
+            round ← current round,
+            payload ← txns,
+            qc ← high qc,
+            id ← hash(author || round || payload || qc.vote info.id || qc.signatures) i'''
+        block = Block(
+            self.validator_id,
+            current_round,
+            txns,
+            self.high_qc,
+            id
+        )
+        LOGGER.log('BlockTree: generate_block: returns', block)
+        return block
+
+    '''Function process vote(v)'''
+    # This funciton will check if it has reached received 2*f +1 votes and generates a QC when it is acheived and returns the qc
+
+    def process_vote(self, vote_msg):
+        LOGGER.log('BlockTree: process_vote', vote_msg)
+        '''process qc(v.high commit qc)'''
+        self.process_qc(vote_msg.high_commit_qc)
+        '''vote idx ← hash(v.ledger commit info)'''
+        vote_idx = Cryptography.hash(vote_msg.ledger_commit_info)
+
+        '''pending votes[vote idx] ← pending votes[vote idx] ∪ v.signature'''
+        if vote_idx in self.pending_votes:
+            self.pending_votes[vote_idx].append(vote_msg.signature)
+            self.pending_signers[vote_idx].append(vote_msg.sender)
+        else:
+            self.pending_votes[vote_idx] = [vote_msg.signature]
+            self.pending_signers[vote_idx] = [vote_msg.sender]
+
+        '''if |pending votes[vote idx]| = 2f + 1 then'''
+        if len(self.pending_votes[vote_idx]) == 2*self.f + 1:
+            '''qc ←QC h
+                vote info ← v.vote info,
+                state id ← v.state id,
+                votes ← pending votes[vote idx] i
+            return qc'''
+            qc = QC(
+                vote_info=vote_msg.vote_info,
+                ledger_commit_info=vote_msg.ledger_commit_info,
+                signatures=self.pending_votes[vote_idx],
+                author=self.validator_id,
+                signers=self.pending_signers[vote_idx]
+            )
+            LOGGER.log('BlockTree: process_vote: returns', qc)
+            return qc
+
+        LOGGER.log('BlockTree: process_vote: returns', None)
+        '''return ⊥'''
+        return None
+
+    '''Procedure process qc(qc)'''
+    # Process_qc will check if qc.ledger_commit_info.commit_state_id is not none and commits the qc.vote_info.parent_id block and also prunes the pending block tree
+
+    def process_qc(self, qc):
+        LOGGER.log('BlockTree: process_qc', qc)
+        '''if qc.ledger commit info.commit state id 6= ⊥ then'''
+        if qc is not None and qc.ledger_commit_info.commit_state_id != None:
+            '''Ledger.commit(qc.vote info.parent id)'''
+            self.ledger.commit(qc.vote_info.parent_id)
+
+            '''pending block tree.prune(qc.vote info.parent id) 
+            // parent id becomes the new root of pending'''
+            # This will prune the multiple forks if they exists
+            if qc.vote_info.parent_id in self.id_block:
+                current_block = self.id_block[qc.vote_info.parent_id]
+                prev_block_qc = current_block.qc
+                if prev_block_qc != None:
+                    if prev_block_qc.vote_info.id in self.id_block:
+                        prev_block = self.id_block[prev_block_qc.vote_info.id]
+                        if prev_block in self.pending_block_tree:
+                            for i in self.pending_block_tree[prev_block]:
+                                if i != current_block and i in self.pending_block_tree:
+                                    del self.pending_block_tree[i]
+                            del self.pending_block_tree[prev_block]
+
+                            # This will prune the uncommited blocks which are recently commited because of the commit of current block -- pruining the top branch too
+                            current_block = prev_block
+                            prev_block_qc = current_block.qc
+                            if prev_block_qc != None:
+                                if prev_block_qc.vote_info.id in self.id_block:
+                                    prev_block = self.id_block[prev_block_qc.vote_info.id]
+                                    while(prev_block in self.pending_block_tree):
+                                        for i in self.pending_block_tree[prev_block]:
+                                            if i in self.pending_block_tree:
+                                                del self.pending_block_tree[i]
+                                        if prev_block in self.pending_block_tree:
+                                            del self.pending_block_tree[prev_block]
+                                        current_block = prev_block
+                                        prev_block_qc = current_block.qc
+                                        if prev_block_qc == None:
+                                            break
+                                        if prev_block_qc.vote_info.id not in self.id_block:
+                                            break
+                                        prev_block = self.id_block[prev_block_qc.vote_info.id]
+
+            '''high commit qc ← maxround{qc, high commit qc}'''
+            self.high_commit_qc = get_qc_with_max_round(
+                qc, self.high_commit_qc)
+        '''high qc ← maxround{qc, high qc}'''
+        self.high_qc = get_qc_with_max_round(qc, self.high_qc)
+        LOGGER.log('BlockTree: process_qc ends', qc)
