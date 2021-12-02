@@ -20,7 +20,8 @@ class LOGGER:
         elif proc in LOGGER.clients:
             other_proc = "client_" + str(LOGGER.clients.index(proc))
         else:
-            other_proc = "parent_process"
+            # other_proc = "parent_process"
+            other_proc = proc
 
         if msg != None and hasattr(msg, '__dict__'):
             msg = todict(msg)

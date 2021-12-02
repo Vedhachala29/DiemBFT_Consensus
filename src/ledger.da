@@ -4,7 +4,7 @@ from logger_util import LOGGER
 
 class Ledger:
 
-    def __init__(self, config_id, validator_id, id_block, recently_committed_block_ids, request_cache):
+    def __init__(self, config_id, validator_id, id_block, recently_committed_block_ids, request_cache, scenario_id):
         self.validator_id = validator_id
         self.config_id = config_id
         self.state_id = 0
@@ -15,7 +15,7 @@ class Ledger:
         self.id_to_block = id_block
         self.request_cache = request_cache
         self.filename = "validator_" + str(validator_id) + ".ledger"
-        fp = open('../ledgers/config' + str(config_id) +
+        fp = open('../ledgers/config' + str(config_id) + '/scenario' + str(scenario_id) +
                   "/" + self.filename, 'w')
         fp.close()
 
@@ -86,6 +86,7 @@ class Ledger:
 
         fp = open('../ledgers/config' + str(self.config_id) +
                   "/" + self.filename, 'a+')
+        commited_txns = []
         while(stack):
             block_id, payload = stack.pop()
             self.commited[block_id] = payload
@@ -94,9 +95,12 @@ class Ledger:
                     LOGGER.log(
                         'Ledger: commit skipping txn as already committed', txn)
                     continue
+                elif txn['command'] == str(-1):
+                    continue
                 else:
                     LOGGER.log('Ledger: commit committing a txn', txn)
                     fp.write(txn['command']+'\n')
+                    commited_txns.append(txn['command'])
             self.recently_committed_block_ids.append(block_id)
             LOGGER.log_action('Committed blocks to ledger',
                                self.recently_committed_block_ids)

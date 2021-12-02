@@ -6,11 +6,11 @@ from logger_util import LOGGER
 
 class Client(process):
 
-    def setup(config, config_id: int, client_id: int, validators: list, private_key, public_keys_validators):
+    def setup(config, config_id: int, client_id: int, validators: list, private_key, public_keys_validators, scenario, scenario_id):
 
         LOGGER.replicas = validators
         LOGGER.process_id = "client_" + str(client_id)
-        LOGGER.filename = '../logs/config' + str(config_id) \
+        LOGGER.filename = '../logs/config' + str(config_id) + '/' + 'scenario' + str(scenario_id) \
             + '/' + LOGGER.process_id + ".log"
 
         LOGGER.log_action("Initial configuration", config)
@@ -20,6 +20,7 @@ class Client(process):
         self.received_sufficient_responses = set()
         self.sleep_time = config['sleeptime']
         self.nops = config['nclientops']
+        self.max_rounds = scenario['max_rounds']
         self.f = config['nfaulty']
 
         Cryptography.private_key = self.private_key
@@ -36,14 +37,20 @@ class Client(process):
         timer.start()
 
     def run():
-        for i in range(nops):
+        for i in range(max_rounds):
             request_id = str(client_id) + "_" + str(i)
             pending_success_results[request_id] = list()
             pending_fail_results[request_id] = list()
-            request = {
-                'req_id': request_id,
-                'command': str(client_id) + "-" + str(i)
-            }
+            if i < nops:
+                request = {
+                    'req_id': request_id,
+                    'command': str(client_id) + "-" + str(i)
+                }
+            else:
+                request = {
+                    'req_id': request_id,
+                    'command': str(-1)
+                }
             send_request(request)
 
         # Wait until we have received valid (f+1) responses for all its requests
@@ -71,6 +78,7 @@ class Client(process):
     def retransmit_request(req, pending_success_results, f):
         if len(pending_success_results[req['req_id']]) < f + 1:
             # Retransmit request if did not receive f+1 responses
-            LOGGER.log_action("Retransmitting Request", req)
-            pending_success_results[req['req_id']].clear()
-            send_request(req)
+            # LOGGER.log_action("Retransmitting Request", req)
+            # pending_success_results[req['req_id']].clear()
+            # send_request(req)
+            pass

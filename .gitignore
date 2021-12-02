@@ -3,3 +3,5 @@ _pycache_/
 ledgers/
 logs/
 .DS_Store
+scenarios/
+config/

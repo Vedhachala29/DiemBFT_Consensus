@@ -35,7 +35,9 @@ class LeaderElection:
         # LOGGER.log("Leader election is Done successfully", None)
         # '''return validators[floor(round//2) mod |validators|] // Round-robin leader (two rounds per leader)'''
         # return self.replicas[((round)//2) % len(self.replicas)]
-        return scenario[round].leader
+        
+        leader_id = self.scenario['rounds'][str(round)]['leader']
+        return self.replicas[leader_id]
 
     '''Procedure update leaders(qc)'''
     def update_leaders(self, qc):
@@ -89,7 +91,7 @@ class LeaderElection:
             '''current qc ← current block.qc'''
             current_qc = current_block.qc
             i = i + 1
-        '''active validators ← active validators \ last authors // contains at least 1 validator'''
+
         #Select active validators which were not leaders recently
         active_validators = active_validators.difference(
             last_authors)
