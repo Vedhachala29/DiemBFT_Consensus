@@ -1,88 +1,49 @@
-Implementation of DiemBFT v4: Machine Replication in the Diem Blockchain. proposed by the Diem team, in DistAlgo
+Implementation of Twins, BFT Systems made robust in DistAlgo
 
-PLATFORM:
+PLATFORM :
 
+Python: Python 3.7.11
+Package manager : Miniconda.
+DistAlgo : Cloned from https://github.com/DistAlgo/distalgo.git and ran setup.py
+Version : pyDistAlgo==1.1.0b15
+Operating system Productname : macOS
+OS ProductVersion: 11.5.2
+OS BuildVersion: 20G95
+Type of Host : Personal Laptop
 
-The software platforms that are used in testing the algorithm are:
+BUGS and LIMITATIONS :
 
-
-OS: 
-macOS 11.6 (Big Sur) 
-Windows 10
-
-
-Python Implementation:
-CPython
-
-
-Python Versions used to test:
-Python 3.6.13
-Python 3.7.0
-Python 3.7.9
-
-
-DistAlgo Version used for implementation:
-1.1.0b15
-
-
-Type of host:
-Laptop
-
-
-WORKLOAD GENERATION:
-
-
-We have specified the configuration that is required in a config file and placed it in a folder and named it as config. This folder consists of many such config files which are configured differently which would simulate the real case scenarios. These files are read by the main process which spawns the specified number of validators, clients, and also takes in the parameters which are required to simulate a real case scenario. These validators and clients run their own processes and communicate with each other which would essentially lead to a consensus of ordering the transactions and finalizing those.
-
-
-The main file which controls the creation of validators and clients is run_diembft.da which is specified in the src folder. This file takes in the different workload configurations that are specified in the config.da file which is in the config folder. Run_diembft.da file after taking in the specified workload spawns the specified number of validators and clients. The client.da file specified in the src folder manages the workloads of all the spawned clients. This client.da file spawns the number of clients specified in the config file. The config file also specifies the number of client requests that the client needs to pass to the validators, the time that it needs to wait in between passing two requests, and the time that it needs to wait before retransmitting a request if it has not been received acknowledgment for a specific request. All the validators when they execute the request sent by the client will pass the response as an acknowledgment back to the client. By this, the client can verify that the request has been successfully executed.
-
-
-TIMEOUTS:
-The timeout formula is computed as 4*delta where delta is the highest time it took for a single round.
-
-
-BUGS AND LIMITATIONS:
--- Sync up of validators is not possible
-–- Depending on the system processing performance, the value of delta(highest time for executing one round) can change. Adjust the value of delta depending on the delta
+1. Syncup might not work properly in all cases?
+2. Timeout issue?
 
 
 MAIN FILES:
--- Main Simulator: <path_of_project_folder>/src/client.da
--- Config: <path_of_project_folder>/config/config.da
--- Client: <path_of_project_folder>/src/client.da
--- Validator(Replica): <path_of_project_folder>/src/validator.da
 
+Client source : <path_of_project_folder>/src/client.da
+Validator source : <path_of_project_folder>/src/validator.da 
+Scenario generator : <path_of_project_folder>src/scenarios_generator.py
+Run scenarios using : <path_of_project_folder>src/run_diembft.py
 
 CODE SIZE:
-1. Non-blank Non-comment lines of code:	1252	(Total)
-                                       	277	(Other - client, config, run_diembft)
-                                       	975	(Algorithm)
-2. Count was obtained using cloc command - cloc --force-lang="Python",da .
 
-
-3. About 80% of 975 are for the algorithm itself.
 
 
 LANGUAGE FEATURE USAGE:
-Our algorithm uses approximately 21 dictionary comprehensions, 11 set comprehensions, 6 list comprehensions, 3 await statements and about 5 receive handlers.
+
+(Pertaining to twin's scenario generation and execution, Not including DiemBFT)
+
+Python list comprehension : 5 
+Python dictionary comprehension : 4
+Python set comprehension : 4
+DistAlgo quantifications : 2 await(each()) quantifications used in run.da
+DistAlgo await statements : 4 await statements
+Number of receive handlers : 2 extra receive handlers used for validator's reception of syncup requests and responses
 
 
 CONTRIBUTIONS:
-(All mentioned members contributed equally towards implementing the DiemBFT Algorithm in DistAlgo. All members contributed towards designing/developing/fixing/documenting most of the modules/tasks. The following contribution list shows some of the major contributions to specific modules/tasks by the contributors)
+
+Vedhachala Tirupattur Shanmugam : Scenario executor, integration with DiemBFT, bugfix in DiemBFT
+Sai Bhargav Varanasi : Scenario generation, bugfix in DiemBFT
+Sujay Lakkimsetti : Scenario generation
 
 
-Vivek Neppalli: 
--- Designed Ledger Tree
--- Designed pruning method for Block Tree
-
-
-Manish Adkar:
--- Developed Main(run_diembft.da) module 
--- Developed Clients and Validators and message passing between each other and the Main module
--- Fault Injection
-
-
-Shubham Sahu:
--- Developed Timeout mechanism and Pacemaker module
--- Developed and integrated Cryptography during message passing and in Safety module
