@@ -7,6 +7,7 @@ class Ledger:
     def __init__(self, config_id, validator_id, id_block, recently_committed_block_ids, request_cache, scenario_id):
         self.validator_id = validator_id
         self.config_id = config_id
+        self.scenario_id = scenario_id
         self.state_id = 0
         self.block_id_to_state_id = dict()
         self.recently_committed_block_ids = recently_committed_block_ids
@@ -84,7 +85,7 @@ class Ledger:
                 break
             current_block_to_commit = self.id_to_block[current_block_to_commit.qc.vote_info.id]
 
-        fp = open('../ledgers/config' + str(self.config_id) +
+        fp = open('../ledgers/config' + str(self.config_id) + '/scenario' + str(self.scenario_id) +
                   "/" + self.filename, 'a+')
         commited_txns = []
         while(stack):

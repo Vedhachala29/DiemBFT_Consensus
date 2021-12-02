@@ -22,26 +22,37 @@ class NetworkPlayground(process):
             MsgType.Vote: "Vote",
             MsgType.Timeout: "Timeout",    
         }
+        self.count_timeouts_latest_round = {}
+        self.noprogress_validators = set()
 
 
     def run():
         await(self.Process_Completed == True)
     def receive(msg=('NetworkPlayground', source, round, msg, msgtype), from_=p):
-        output("Received", msgtypestr[msgtype], str(source), 'at round', round)
+        output(str(source), " sending ", msgtypestr[msgtype], 'at round ', round)
         destination = evaluate_destination(source, round, msgtype)
         if len(destination):
             send((msgtypestr[msgtype], msg, p), to=destination)
+        
+        if last_executed_round.get(source, -1) < round:
+            count_timeouts_latest_round[source] = 0
 
         last_executed_round[source] = round
         check_no_commit_pool(source)
+        count_timeouts_latest_round[source] = count_timeouts_latest_round[source] + 1
+        # check_progress_on_timeout()
         if round >= scenario['max_rounds']:
             check_process_completion()
 
+
+        
     def receive(msg=('CommitNotification', source, round, txns), from_=p):
+        output('CommitNotification from: ', source, 'at round: ', round, ' txns: ', txns)
         last_committed_round[source] = round
         update_no_commit_pool(round)
         do_safety_check(source,txns)
         check_process_completion()
+        output('cp 4')
         
 
     def evaluate_destination(source, round, msgtype):
@@ -51,7 +62,7 @@ class NetworkPlayground(process):
         for partition_config in PLF_list:
             partition_sets  = partition_config[0]
             failtype = partition_config[1]
-            output("TEST11", partition_sets)
+            # output("TEST11", source,  partition_sets)
             if failtype == "Failure_Type.NONE":
                 for ipartition in partition_sets:
                     if source in ipartition:
@@ -62,7 +73,7 @@ class NetworkPlayground(process):
             next_leader = scenario['rounds'][str(round+1)]['leader']
             intended_destination = [next_leader]
             if str(next_leader) in config['twin']:
-                intended_destination.append(config['twin'][str(next_leader) ])
+                intended_destination.append(config['twin'][str(next_leader)])
         
         destination = []
         d1 = []
@@ -70,16 +81,17 @@ class NetworkPlayground(process):
             if validator_id in partition:
                 d1.append(validator_id)
                 destination.append(validators[validator_id])
-        output("TEST2",str(source), "Part: ", d1)
+        output("TEST2" , "destination: ", d1)
         return destination
 
     def check_no_commit_pool(source):
         
-        if last_executed_round.get(source, -1) - last_committed_round.get(source, -1) >= MIN_IDLE_ROUNDS:
+        if last_executed_round.get(source, 0) - last_committed_round.get(source, 0) >= MIN_IDLE_ROUNDS:
             nocommit_pool.add(source)
         if len(nocommit_pool) == 2*config['nfaulty']+1:
             ''' Liveliness Violation '''
-            send(('Done','Liveliness Violation'), to=parent())
+            self.Process_Completed = True
+            send(('DoneFromNP','Liveliness Violation'), to=parent())
     
     def update_no_commit_pool(source):
         if source not in nocommit_pool:
@@ -91,7 +103,7 @@ class NetworkPlayground(process):
         if str(source) in config['twin']: # need not check safety for faulty nodes
             return
         last_commited_index = len(txn_commit_order.get(source, [])) - 1
-        if last_commited_index == 0:
+        if last_commited_index == -1:
             txn_commit_order[source] = []
         out_of_order = False
         for command in txns:
@@ -108,18 +120,37 @@ class NetworkPlayground(process):
                     break
         if out_of_order:
             output('Safety Violated', )
-            send(('Done','Safety Violated'), to=parent())
+            self.Process_Completed = True
+            send(('DoneFromNP','Safety Violated'), to=parent())
     
     def check_process_completion():
         non_faulty_pendings_commits = False
         for i in range(0, len(validators)):
             if str(i) in config['twin']:
                 continue
-            if len(txn_commit_order.get(source, [])) < config['nclientops']:
+            if len(txn_commit_order.get(i, [])) < config['nclientops']:
                 non_faulty_pendings_commits = True
                 break
         if non_faulty_pendings_commits is False:
-            send(('Done','Execution Completed'), to=parent())
+            self.Process_Completed = True
+            send(('DoneFromNP','Execution Completed'), to=parent())
+            return True
+        else:
+            return False
+    
+    def check_progress_on_timeout():
+        violated = 0
+        for i in range(0, len(validators)):
+            if count_timeouts_latest_round.get(i,0) >= 2:
+                violated = violated + 1
+    
+        if violated >= 2*config['nfaulty']+1:
+            output('Network Playground: No Progress')
+            self.Process_Completed = True
+            send(('DoneFromNP','Liveness Violation'), to=parent())
+            return True
+        else:
+            return False
         
         
 

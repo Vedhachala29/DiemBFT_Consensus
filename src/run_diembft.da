@@ -18,6 +18,7 @@ class RunDiemBFT(process):
         self.nclients = int(config['nclients'])
         self.nfaulty = int(config['nfaulty'])
         self.scenario = scenario
+        self.execution_complete = False
 
     def run():
 
@@ -64,9 +65,15 @@ class RunDiemBFT(process):
         start(validators)
         start(clients)
 
-        await(received(('Done',), from_=NP))
-        output("Exeution Over: ", scenario_id)
+        await(self.execution_complete == True)
+        output("Execution Over: ", scenario_id)
         send(('Done',), to=validators)
+        send(('Done',), to= nodeof(self))
+
+    def receive(msg=('DoneFromNP', reason), from_=p):
+        output('Reason from Main: ', reason)
+        self.execution_complete = True
+
 
 
 def is_config_valid(config):
@@ -82,7 +89,7 @@ def is_config_valid(config):
 
 
 def main():
-
+    config(clock="Lamport", channel="fifo")
     if os.path.exists('../logs/') and os.path.isdir('../logs/'):
         shutil.rmtree('../logs/')
 
@@ -103,3 +110,4 @@ def main():
             setup(p, (config, config_id, scenario, scenario_id))
             start(p)
             scenario_id += 1
+            await(received(('Done',), from_=nodeof(self)))  

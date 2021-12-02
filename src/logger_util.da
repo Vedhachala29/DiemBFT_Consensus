@@ -57,7 +57,8 @@ class LOGGER:
         )
         f.close()
 
-    def log(funcname, *params): pass
+    def log(funcname, *params): 
+        pass
         # timestamp = datetime.datetime.now()
         # f = open(LOGGER.filename, 'a+')
         # p_list = []
@@ -66,6 +67,7 @@ class LOGGER:
         #         p = p.__dict__
         #     p_list.append(p)
 
-        # print(timestamp, LOGGER.process_id,
+        # print(LOGGER.process_id,
         #       funcname, p_list, file=f)
         # f.close()
+

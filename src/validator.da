@@ -33,6 +33,7 @@ class Validator (process):
         self.recently_committed_block_ids = list()
         self.should_start_new_round = True
         self.validator_id = validator_id
+        self.syncup_inprogress = False
 
         self.ledger = Ledger(
             config_id, validator_id, self.id_block, self.recently_committed_block_ids, self.request_cache, scenario_id)
@@ -153,13 +154,16 @@ class Validator (process):
 
             # Send syncup request if it's out of sync.
              #proposal_msg.block.qc.vote_info.round > self.blocktree.high_qc.vote_info.round
-            if  proposal_msg.block.qc and compare_qc_with_max_round(proposal_msg.block.qc, self.blocktree.high_qc):
-                output("Proposal msg block qc ", todict(proposal_msg.block.qc))
-                send(('SyncRequest', self.blocktree.high_qc), to=p)
+            if  proposal_msg.block.qc and compare_qc_with_max_round(proposal_msg.block.qc, self.blocktree.high_qc) > 1:
+                output('starting sync up for:', self.validator_id, 'current round: ', self.pacemaker.current_round)
+                self.syncup_inprogress = True
+                send(('SyncRequest', self.blocktree.high_qc), to=source)
+                await(self.syncup_inprogress == False)
+                output('sync check ', compare_qc_with_max_round(proposal_msg.block.qc, self.blocktree.high_qc) , ' current round: ', self.pacemaker.current_round)
 
             self.should_start_new_round = False
 
-            if proposal_msg.block.qc is not None and p != replicas[validator_id]:
+            if proposal_msg.block.qc is not None and source != replicas[validator_id]:
                 '''process certificate qc(P.block.qc)'''
                 process_certificate_qc(proposal_msg.block.qc)
 
@@ -180,7 +184,7 @@ class Validator (process):
                 LOGGER.log("ROUND PROPOSAL EARLY EXIT", proposal_msg.block.round, round, replicas[proposal_msg.sender], leader)
                 return
 
-            if p != replicas[validator_id]:
+            if source != replicas[validator_id]:
                 # Validate (and remove) the transactions in current mempool with the received txns
                 if not self.mempool.validate_and_remove_transactions(proposal_msg.block.payload):
                     LOGGER.log(
@@ -240,6 +244,14 @@ class Validator (process):
         if signature_verified is not None:
             LOGGER.log_action("Verified TimeoutMsg signature", True)
 
+            if timeout_msg.tmo_info.high_qc and compare_qc_with_max_round(timeout_msg.tmo_info.high_qc, self.blocktree.high_qc) > 1:
+                # output("Proposal msg block qc ", todict(proposal_msg.block.qc))
+                self.syncup_inprogress = True
+                send(('SyncRequest', self.blocktree.high_qc), to=source)
+                await(self.syncup_inprogress == False)
+                output('sync check ', compare_qc_with_max_round(timeout_msg.tmo_info.high_qc, self.blocktree.high_qc))
+
+
             '''process certificate qc(M.tmo info.high qc)
             process certificate qc(M.high commit qc)'''
             process_certificate_qc(timeout_msg.tmo_info.high_qc)
@@ -285,38 +297,51 @@ class Validator (process):
     
     def receive(msg=('SyncRequest', high_qc), from_=p):
         # LOGGER.log("Received request for sync up")
-        output("Received request for sync up from ", p)
-        pending_blocks = []
+        # output("Received request for sync up from ", p)
+        
 
         current_block = self.blocktree.id_block[self.blocktree.high_qc.vote_info.id]
 
-        output("Received high_qc", todict(high_qc))
-        output("current_block", todict(current_block))
-        while current_block and current_block.qc and compare_qc_with_max_round(current_block.qc, high_qc):
-            pending_blocks.append(current_block)
-            current_block = self.blocktree.id_block[current_block.qc.vote_info.id]
+        # output("Received÷ high_qc ", todict(high_qc))
+        # output("current_block ", todict(current_block))
+        pending_blocks = []
         
-        output("Sending sync response to ", pending_blocks[::-1], p)
-        send(('SyncResponse', pending_blocks[::-1]), to=p)
+        for blockid, blocki in self.blocktree.id_block.items():
+            if bool_compare_qc_with_max_round(blocki.qc, high_qc):
+                pending_blocks.append(blocki)
+
+        # while current_block and current_block.qc and compare_qc_with_max_round(current_block.qc, high_qc):
+        #     current_block = self.blocktree.id_block[current_block.qc.vote_info.id]
+        #     if current_block:
+        #         pending_blocks.append(current_block)
+        
+        # if current_block and :
+        #     pending_blocks.append(current_block)
+        
+        # output("Sending sync response to ", pending_blocks[::-1], p)
+        send(('SyncResponse', pending_blocks), to=p)
     
     def receive(msg=('SyncResponse', blocks_list), from_=p):
         # LOGGER.log("Received response for sync up")
-        output("Received response for sync up ", p)
+        output("At validator:",self.validator_id, ": Received response for sync up", len(blocks_list))
 
         if len(blocks_list) == 0:
-            output("Received empty list from ", p)
+            output("Received empty sync list from ", p)
             return
 
         output("Fixing blocktree structure")
+        test_l = []
         for block in blocks_list:
             if not Cryptography.valid_signatures(block.qc):
                 LOGGER.log("Invalid QC Signatures received")
                 return
+            test_l.append(block.payload)
             self.blocktree.execute_and_insert(block)
             self.blocktree.process_qc(block.qc)
         
-        output("blocks_list.id", blocks_list[-1].id)
+        output("all syncup txns: ", test_l)
         self.safety.update_safety_counters(blocks_list[-1])
+        self.syncup_inprogress = False
             
 
     def send_message_to_playground(MsgType, msg):
@@ -326,7 +351,7 @@ class Validator (process):
         LOGGER.log('Validator: process_certificate_qc recent_committed_block', len(
             self.recently_committed_block_ids))
         # Send responses to the requests which were recently committed
-        commited_commands = ()
+        commited_commands = set()
         if len(self.recently_committed_block_ids) > 0:
             for block_id in self.recently_committed_block_ids:
                 for txn in self.id_block[block_id].payload:
