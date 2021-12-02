@@ -73,3 +73,4 @@ def persist_to_file(partitions, file_path):
     file.flush()
     os.fsync(file.fileno())
     file.close()
+    
