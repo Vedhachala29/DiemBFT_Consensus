@@ -14,6 +14,19 @@ def get_qc_with_max_round(qc1: QC, qc2: QC):
         else:
             return qc2
 
+def compare_qc_with_max_round(qc1: QC, qc2: QC):
+    if (qc1 is None and qc2 is None) or (qc1 is not None and qc2 is not None and qc1.vote_info is None and qc2.vote_info is None):
+        return False
+    elif qc1 is None and qc2 is not None and qc2.vote_info is not None:
+        return False
+    elif qc1 is not None and qc1.vote_info is not None and qc2 is None:
+        return True
+    else:
+        if qc1.vote_info.round > qc2.vote_info.round:
+            return True
+        else:
+            return False
+
 
 def todict(obj):
     if isinstance(obj, dict):

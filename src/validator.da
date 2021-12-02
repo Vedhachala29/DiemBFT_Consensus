@@ -11,12 +11,14 @@ from mem_pool import MemPool
 from object_types import FailType, MsgType, ProposalMsg
 from pacemaker import Pacemaker
 from safety import Safety
+from utils import *
 
 
 class Validator (process):
 
     def setup(config, config_id: int, validator_id: int, replicas: list, clients: list, private_key, public_keys_validators, public_keys_clients, scenario,scenario_id,  NetworkPlayground):
 
+    
         LOGGER.replicas = replicas
         LOGGER.process_id = "validator_" + str(validator_id)
         LOGGER.clients = clients
@@ -149,6 +151,12 @@ class Validator (process):
         if signature_verified is not None:
             LOGGER.log_action("Verified ProposalMsg signature", True)
 
+            # Send syncup request if it's out of sync.
+             #proposal_msg.block.qc.vote_info.round > self.blocktree.high_qc.vote_info.round
+            if  proposal_msg.block.qc and compare_qc_with_max_round(proposal_msg.block.qc, self.blocktree.high_qc):
+                output("Proposal msg block qc ", todict(proposal_msg.block.qc))
+                send(('SyncRequest', self.blocktree.high_qc), to=p)
+
             self.should_start_new_round = False
 
             if proposal_msg.block.qc is not None and p != replicas[validator_id]:
@@ -274,6 +282,42 @@ class Validator (process):
                 self.should_start_new_round = False
         else:
             LOGGER.log_action("Verified Client Request signature", False)
+    
+    def receive(msg=('SyncRequest', high_qc), from_=p):
+        # LOGGER.log("Received request for sync up")
+        output("Received request for sync up from ", p)
+        pending_blocks = []
+
+        current_block = self.blocktree.id_block[self.blocktree.high_qc.vote_info.id]
+
+        output("Received high_qc", todict(high_qc))
+        output("current_block", todict(current_block))
+        while current_block and current_block.qc and compare_qc_with_max_round(current_block.qc, high_qc):
+            pending_blocks.append(current_block)
+            current_block = self.blocktree.id_block[current_block.qc.vote_info.id]
+        
+        output("Sending sync response to ", pending_blocks[::-1], p)
+        send(('SyncResponse', pending_blocks[::-1]), to=p)
+    
+    def receive(msg=('SyncResponse', blocks_list), from_=p):
+        # LOGGER.log("Received response for sync up")
+        output("Received response for sync up ", p)
+
+        if len(blocks_list) == 0:
+            output("Received empty list from ", p)
+            return
+
+        output("Fixing blocktree structure")
+        for block in blocks_list:
+            if not Cryptography.valid_signatures(block.qc):
+                LOGGER.log("Invalid QC Signatures received")
+                return
+            self.blocktree.execute_and_insert(block)
+            self.blocktree.process_qc(block.qc)
+        
+        output("blocks_list.id", blocks_list[-1].id)
+        self.safety.update_safety_counters(blocks_list[-1])
+            
 
     def send_message_to_playground(MsgType, msg):
         send(('NetworkPlayground', self.validator_id, self.pacemaker.current_round, msg, MsgType), to=NetworkPlayground)

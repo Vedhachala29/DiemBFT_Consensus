@@ -188,3 +188,10 @@ class Safety:
         LOGGER.log('Safety: make_timeout: returns2', None)
         '''return ⊥'''
         return None
+    
+    def update_safety_counters(self, block):
+        if Cryptography.valid_signatures(block):
+            '''update highest qc round(qc round) // Protect qc round'''
+            self.__update_highest_qc_round(block.qc.vote_info.round)
+            '''increase highest vote round(b.round) // Don’t vote again in this (or lower) round'''
+            self.__increase_highest_vote_round(block.round)
