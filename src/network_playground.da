@@ -1,5 +1,5 @@
 from object_types import MsgType
-from logger_util import LOGGER
+from logger_util import *
 
 class NetworkPlayground(process):
     def setup(config, config_id: int, scenario,scenario_id, validators):
@@ -9,12 +9,15 @@ class NetworkPlayground(process):
         LOGGER.filename = '../logs/config' + str(config_id) + '/' + 'scenario' + str(scenario_id) \
             + '/' + LOGGER.process_id + ".log"
 
+        LOGGER.log_event('Initial', 'Setup', str(config))
+
         self.last_executed_round = {}
         self.last_committed_round = {}
         self.txn_commit_order = {} # safety check
         self.nocommit_pool = set()
         self.scenario = scenario
-        self.MIN_IDLE_ROUNDS = 6
+        self.nocommit_threshold = config['nocommit_threshold']
+        self.max_idle_round_timeouts = config['max_idle_round_timeouts']
         self.validators = validators
         self.Process_Completed = False
         self.msgtypestr = {
@@ -30,7 +33,9 @@ class NetworkPlayground(process):
         await(self.Process_Completed == True)
     def receive(msg=('NetworkPlayground', source, round, msg, msgtype), from_=p):
         output(str(source), " sending ", msgtypestr[msgtype], 'at round ', round)
+        LOGGER.log_event('Received ', msgtypestr[msgtype] , 'round: '+ str(round), source)
         destination = evaluate_destination(source, round, msgtype)
+
         if len(destination):
             send((msgtypestr[msgtype], msg, p), to=destination)
         
@@ -41,7 +46,7 @@ class NetworkPlayground(process):
         check_no_commit_pool(source)
         count_timeouts_latest_round[source] = count_timeouts_latest_round[source] + 1
         # check_progress_on_timeout()
-        if round >= scenario['max_rounds']:
+        if round >= config['max_rounds']:
             check_process_completion()
 
 
@@ -62,11 +67,19 @@ class NetworkPlayground(process):
         for partition_config in PLF_list:
             partition_sets  = partition_config[0]
             failtype = partition_config[1]
-            # output("TEST11", source,  partition_sets)
-            if failtype == "Failure_Type.NONE":
+            if failtype == "Failure_Type.WILDCARD":
                 for ipartition in partition_sets:
                     if source in ipartition:
                         partition = ipartition
+            if failtype == "Failure_Type.VOTE" and msgtype == MsgType.Vote:
+                for ipartition in partition_sets:
+                    if source in ipartition:
+                        partition = ipartition
+            if failtype == "Failure_Type.PROPOSE" and msgtype == MsgType.Proposal:
+                for ipartition in partition_sets:
+                    if source in ipartition:
+                        partition = ipartition
+
         if msgtype in [MsgType.Proposal, MsgType.Timeout]:
             intended_destination = list(range(len(validators)))
         if msgtype == MsgType.Vote:
@@ -76,27 +89,29 @@ class NetworkPlayground(process):
                 intended_destination.append(config['twin'][str(next_leader)])
         
         destination = []
-        d1 = []
+        destination_ids = []
         for validator_id in intended_destination:
             if validator_id in partition:
-                d1.append(validator_id)
+                destination_ids.append(validator_id)
                 destination.append(validators[validator_id])
-        output("TEST2" , "destination: ", d1)
+        LOGGER.log_event('Forward ', msgtypestr[msgtype] , 'from ' + str(source) + ' round: '+ str(round), destination_ids)
+
         return destination
 
     def check_no_commit_pool(source):
         
-        if last_executed_round.get(source, 0) - last_committed_round.get(source, 0) >= MIN_IDLE_ROUNDS:
+        if last_executed_round.get(source, 0) - last_committed_round.get(source, 0) >= self.nocommit_threshold:
             nocommit_pool.add(source)
         if len(nocommit_pool) == 2*config['nfaulty']+1:
             ''' Liveliness Violation '''
+            LOGGER.log_action('Completed', 'Liveliness Violation: No commit happened for majority of nodes in ' + str(self.nocommit_threshold)+ ' rounds')
             self.Process_Completed = True
             send(('DoneFromNP','Liveliness Violation'), to=parent())
     
     def update_no_commit_pool(source):
         if source not in nocommit_pool:
             return
-        if last_executed_round.get(source, -1) - last_committed_round.get(source, -1) < MIN_IDLE_ROUNDS:
+        if last_executed_round.get(source, -1) - last_committed_round.get(source, -1) < self.nocommit_threshold:
             nocommit_pool.remove(source)
 
     def do_safety_check(source, txns):
@@ -119,7 +134,7 @@ class NetworkPlayground(process):
                     out_of_order = True
                     break
         if out_of_order:
-            output('Safety Violated', )
+            LOGGER.log_action('Completed ', 'Safety Violation : Commits Out of Order')
             self.Process_Completed = True
             send(('DoneFromNP','Safety Violated'), to=parent())
     
@@ -132,6 +147,7 @@ class NetworkPlayground(process):
                 non_faulty_pendings_commits = True
                 break
         if non_faulty_pendings_commits is False:
+            LOGGER.log_action('Completed ', ' Commits Successful')
             self.Process_Completed = True
             send(('DoneFromNP','Execution Completed'), to=parent())
             return True
@@ -141,11 +157,11 @@ class NetworkPlayground(process):
     def check_progress_on_timeout():
         violated = 0
         for i in range(0, len(validators)):
-            if count_timeouts_latest_round.get(i,0) >= 2:
+            if count_timeouts_latest_round.get(i,0) >= self.max_idle_round_timeouts:
                 violated = violated + 1
     
         if violated >= 2*config['nfaulty']+1:
-            output('Network Playground: No Progress')
+            LOGGER.log_event('Completed ', 'Liveliness Violation: No Round Progress for majority of Nodes ')
             self.Process_Completed = True
             send(('DoneFromNP','Liveness Violation'), to=parent())
             return True

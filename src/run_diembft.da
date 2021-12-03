@@ -102,9 +102,16 @@ def main():
         config_id = config['id']
         os.makedirs('../logs/config' + str(config_id))
         os.makedirs('../ledgers/config' + str(config_id))
-        f = open('../scenarios/' + str(config['id']) + '.json')
+        f = open('../scenarios/config_' + str(config['id']) + '.json')
         scenarios = json.load(f)
         scenario_id = 0
+
+        twin_pairs = dict()
+        for twin in config['twin']:
+            t = config['twin'][twin]
+            twin_pairs[str(t)] = twin
+        config['twin'].update(twin_pairs)
+            
         for scenario in scenarios:
             p = new(RunDiemBFT)
             setup(p, (config, config_id, scenario, scenario_id))

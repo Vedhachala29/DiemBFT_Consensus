@@ -20,7 +20,7 @@ class Client(process):
         self.received_sufficient_responses = set()
         self.sleep_time = config['sleeptime']
         self.nops = config['nclientops']
-        self.max_rounds = scenario['max_rounds']
+        self.max_rounds = config['max_rounds']
         self.f = config['nfaulty']
 
         Cryptography.private_key = self.private_key
@@ -37,7 +37,7 @@ class Client(process):
         timer.start()
 
     def run():
-        for i in range(max_rounds):
+        for i in range(self.max_rounds):
             request_id = str(client_id) + "_" + str(i)
             pending_success_results[request_id] = list()
             pending_fail_results[request_id] = list()

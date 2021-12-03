@@ -5,3 +5,5 @@ logs/
 .DS_Store
 scenarios/
 config/
+src/partition_leader_list.txt
+src/partitions.txt

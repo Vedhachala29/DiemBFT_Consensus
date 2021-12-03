@@ -4,7 +4,7 @@ from logger_util import LOGGER
 
 class Ledger:
 
-    def __init__(self, config_id, validator_id, id_block, recently_committed_block_ids, request_cache, scenario_id):
+    def __init__(self, config_id, validator_id, id_block, recently_committed_block_ids, request_cache, scenario_id, mempool):
         self.validator_id = validator_id
         self.config_id = config_id
         self.scenario_id = scenario_id
@@ -15,6 +15,7 @@ class Ledger:
         self.commited = dict()
         self.id_to_block = id_block
         self.request_cache = request_cache
+        self.mempool = mempool
         self.filename = "validator_" + str(validator_id) + ".ledger"
         fp = open('../ledgers/config' + str(config_id) + '/scenario' + str(scenario_id) +
                   "/" + self.filename, 'w')
@@ -97,17 +98,19 @@ class Ledger:
                         'Ledger: commit skipping txn as already committed', txn)
                     continue
                 elif txn['command'] == str(-1):
+                    commited_txns.append(txn)
                     continue
                 else:
                     LOGGER.log('Ledger: commit committing a txn', txn)
                     fp.write(txn['command']+'\n')
-                    commited_txns.append(txn['command'])
+                    commited_txns.append(txn)
             self.recently_committed_block_ids.append(block_id)
             LOGGER.log_action('Committed blocks to ledger',
                                self.recently_committed_block_ids)
         fp.close()
 
         LOGGER.log('Ledger: commit: ends', None)
+        self.mempool.validate_and_remove_transactions(commited_txns)
 
         # Discarding the speculated branches that fork from ancestors of the commited block -- Pruning of the speculate tree
         if block_id not in self.id_to_block:

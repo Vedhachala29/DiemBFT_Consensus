@@ -5,7 +5,7 @@ import math
 import os
 import json
 
-def scenario_generator(nodes, twins, n_partitions, n_rounds, partition_limit, partition_leader_limit, 
+def scenario_generator(nodes, twins, n_partitions, max_rounds, partition_limit, partition_leader_limit, 
             max_testcases, seed, is_Faulty_Leader, is_Deterministic, file_path):  
     """
         Example : 
@@ -98,9 +98,9 @@ def scenario_generator(nodes, twins, n_partitions, n_rounds, partition_limit, pa
     count=0
     while num_scenarios < max_testcases and count < 10*max_testcases:
         count+=1
-        scenario_tuple = create_scenario(partition_leader_list_high_p, seed, is_Deterministic, n_rounds, len(nodes), len(twins), iterator)
+        scenario_tuple = create_scenario(partition_leader_list_high_p, seed, is_Deterministic, max_rounds, len(nodes), len(twins), iterator)
         iterator = scenario_tuple[1]
-        if is_valid(scenario_tuple[0], n_rounds, len(twins), 3):
+        if is_valid(scenario_tuple[0], max_rounds, len(twins), 3):
             num_scenarios+=1
             scenarios.append(scenario_tuple[0])
 
@@ -156,7 +156,7 @@ def create_scenario(partition_leader_list, seed, is_Deterministic, rounds, n_nod
             rounds_dict[round]["partitions"] = [tuple1[1:], tuple2[1:], tuple3[1:]]
             iterator=(iterator+1)%len(partition_leader_list)
     
-    scenario["n_rounds"] = rounds
+    scenario["max_rounds"] = rounds
     scenario["rounds"] = rounds_dict
     return (scenario, iterator)
     
@@ -206,7 +206,7 @@ def main():
     for config in configs:
         config_id = config['id']
         nodes = [i for i in range(config['nvalidators'])]
-        scenario_generator(nodes, config['twin'], config['n_partitions'], config['n_rounds'], config['partition_limit'], 
+        scenario_generator(nodes, config['twin'], config['n_partitions'], config['max_rounds'], config['partition_limit'], 
                 config['partition_leader_limit'], config['max_testcases'], config['seed'], config['is_Faulty_Leader'], 
                 config['is_Deterministic'], f'../scenarios/config_{config_id}.json')
 

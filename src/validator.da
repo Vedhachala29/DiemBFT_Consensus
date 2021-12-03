@@ -35,15 +35,16 @@ class Validator (process):
         self.validator_id = validator_id
         self.syncup_inprogress = False
 
+        self.mempool = MemPool(validator_id)
         self.ledger = Ledger(
-            config_id, validator_id, self.id_block, self.recently_committed_block_ids, self.request_cache, scenario_id)
+            config_id, validator_id, self.id_block, self.recently_committed_block_ids, self.request_cache, scenario_id, self.mempool)
         self.blocktree = BlockTree(
             validator_id, replicas, self.ledger, config['nfaulty'], self.id_block)
         self.safety = Safety(validator_id, replicas,
                              self.ledger, self.blocktree)
         self.pacemaker = Pacemaker(
             validator_id, replicas, self.blocktree, self.safety, config['nfaulty'], config['delta'], send_timeout_msg)
-        self.mempool = MemPool(validator_id)
+        
         self.leader_election = LeaderElection(
             validator_id, replicas, self.ledger, self.pacemaker, config['window_size'], config['exclude_size'], scenario)
 
@@ -151,7 +152,7 @@ class Validator (process):
 
         if signature_verified is not None:
             LOGGER.log_action("Verified ProposalMsg signature", True)
-
+            
             # Send syncup request if it's out of sync.
              #proposal_msg.block.qc.vote_info.round > self.blocktree.high_qc.vote_info.round
             if  proposal_msg.block.qc and compare_qc_with_max_round(proposal_msg.block.qc, self.blocktree.high_qc) > 1:
@@ -184,16 +185,17 @@ class Validator (process):
                 LOGGER.log("ROUND PROPOSAL EARLY EXIT", proposal_msg.block.round, round, replicas[proposal_msg.sender], leader)
                 return
 
-            if source != replicas[validator_id]:
-                # Validate (and remove) the transactions in current mempool with the received txns
-                if not self.mempool.validate_and_remove_transactions(proposal_msg.block.payload):
-                    LOGGER.log(
-                        "Not processing the Proposal message as transactions are not valid", None)
-                    return
+            # if source != replicas[validator_id]:
+            #     # Validate (and remove) the transactions in current mempool with the received txns
+            #     if not self.mempool.validate_and_remove_transactions(proposal_msg.block.payload):
+            #         LOGGER.log(
+            #             "Not processing the Proposal message as transactions are not valid", None)
+            #         return
 
             if len(proposal_msg.block.payload) == 0:
                 self.should_start_new_round = True
 
+            self.mempool.proposed_txns.add(proposal_msg.block.payload[0]['req_id'])
             '''Block-Tree.execute and insert(P) // Adds a new speculative state to the Ledger'''
             self.blocktree.execute_and_insert(proposal_msg.block)
 
@@ -244,13 +246,13 @@ class Validator (process):
         if signature_verified is not None:
             LOGGER.log_action("Verified TimeoutMsg signature", True)
 
-            if timeout_msg.tmo_info.high_qc and compare_qc_with_max_round(timeout_msg.tmo_info.high_qc, self.blocktree.high_qc) > 1:
+            if timeout_msg.tmo_info.high_qc and compare_qc_with_max_round(timeout_msg.tmo_info.high_qc, self.blocktree.high_qc) > 0:
                 # output("Proposal msg block qc ", todict(proposal_msg.block.qc))
                 self.syncup_inprogress = True
                 send(('SyncRequest', self.blocktree.high_qc), to=source)
                 await(self.syncup_inprogress == False)
                 output('sync check ', compare_qc_with_max_round(timeout_msg.tmo_info.high_qc, self.blocktree.high_qc))
-
+            
 
             '''process certificate qc(M.tmo info.high qc)
             process certificate qc(M.high commit qc)'''
@@ -294,13 +296,11 @@ class Validator (process):
                 self.should_start_new_round = False
         else:
             LOGGER.log_action("Verified Client Request signature", False)
+
     
     def receive(msg=('SyncRequest', high_qc), from_=p):
         # LOGGER.log("Received request for sync up")
         # output("Received request for sync up from ", p)
-        
-
-        current_block = self.blocktree.id_block[self.blocktree.high_qc.vote_info.id]
 
         # output("Received÷ high_qc ", todict(high_qc))
         # output("current_block ", todict(current_block))
@@ -338,9 +338,11 @@ class Validator (process):
             test_l.append(block.payload)
             self.blocktree.execute_and_insert(block)
             self.blocktree.process_qc(block.qc)
-        
-        output("all syncup txns: ", test_l)
+                
         self.safety.update_safety_counters(blocks_list[-1])
+        self.pacemaker.advance_round_qc(blocks_list[-1].qc)
+        output("all syncup txns: ", test_l)
+        output("r_progress: ", self.pacemaker.current_round)
         self.syncup_inprogress = False
             
 
@@ -351,7 +353,7 @@ class Validator (process):
         LOGGER.log('Validator: process_certificate_qc recent_committed_block', len(
             self.recently_committed_block_ids))
         # Send responses to the requests which were recently committed
-        commited_commands = set()
+        commited_commands = []
         if len(self.recently_committed_block_ids) > 0:
             for block_id in self.recently_committed_block_ids:
                 for txn in self.id_block[block_id].payload:
@@ -362,13 +364,13 @@ class Validator (process):
                     }
                     if txn['command'] == str(-1):
                         continue
-                    commited_commands.add(txn['command'])
+                    commited_commands.append(txn['command'])
                     send(('Response', resp), to=txn['client'])
                     LOGGER.log_event("Sent", "Response", resp, txn['client'])
                     self.request_cache[request_id] = resp
             self.recently_committed_block_ids.clear()
             if len(commited_commands) > 0:
-                send(('CommitNotification',self.validator_id, self.pacemaker.current_round, list(commited_commands)), to=NetworkPlayground)
+                send(('CommitNotification',self.validator_id, self.pacemaker.current_round, commited_commands), to=NetworkPlayground)
 
 
 class ValidatorFI (process, Validator):

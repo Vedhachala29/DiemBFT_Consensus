@@ -11,6 +11,7 @@ class LOGGER:
     filename = ""
 
     def log_event(event, msg_type, msg, proc=None):
+        other_proc = ''
         if proc is None:
             pass
         elif type(proc) == set or type(proc) == list:
