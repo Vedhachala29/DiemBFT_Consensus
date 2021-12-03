@@ -20,13 +20,14 @@ def scenario_generator(nodes, twins, n_partitions, n_rounds, partition_limit, pa
     for i in partitions_list:
         print(i)
     
+            
     #Step 2
     partition_leader_list_high_p = []
     partition_leader_list_low_p = []
     partition_leader_list = []
     count = 0
 
-    n = total_nodes if is_Faulty_Leader else [int(i) for i in list(twins.keys())] #Filtering only faulty nodes if is_Faulty_Leader is set      
+    n = total_nodes if is_Faulty_Leader else [int(i) for i in list(twins.keys())] #Filtering only faulty nodes if is_Faulty_Leader is set
 
     flag = False
     for partition_set in partitions_list:
