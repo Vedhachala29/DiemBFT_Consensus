@@ -68,6 +68,7 @@ class RunDiemBFT(process):
         await(self.execution_complete == True)
         output("Execution Over: ", scenario_id)
         send(('Done',), to=validators)
+        send(('Done',), to=clients)
         send(('Done',), to= nodeof(self))
 
     def receive(msg=('DoneFromNP', reason), from_=p):
@@ -117,4 +118,4 @@ def main():
             setup(p, (config, config_id, scenario, scenario_id))
             start(p)
             scenario_id += 1
-            await(received(('Done',), from_=nodeof(self)))  
+            await(received(('Done',), from_=p)) 

@@ -31,6 +31,8 @@ class NetworkPlayground(process):
 
     def run():
         await(self.Process_Completed == True)
+        output("Terminating Network playground")
+
     def receive(msg=('NetworkPlayground', source, round, msg, msgtype), from_=p):
         output(str(source), " sending ", msgtypestr[msgtype], 'at round ', round)
         LOGGER.log_event('Received ', msgtypestr[msgtype] , 'round: '+ str(round), source)
