@@ -16,17 +16,17 @@ def scenario_generator(nodes, twins, n_partitions, n_rounds, partition_limit, pa
     total_nodes = nodes + list(twins.values())
     #Step 1
     partitions_list = generate_heuristic_partitions(n_partitions, nodes, twins, partition_limit, is_Deterministic, seed, f'./partitions.txt')
-    
+    print("Length of partition_list : " , len(partitions_list), "\n")
+    for i in partitions_list:
+        print(i)
+            
     #Step 2
     partition_leader_list_high_p = []
     partition_leader_list_low_p = []
     partition_leader_list = []
     count = 0
 
-    if is_Faulty_Leader: 
-        n = list(twins.keys())                       #Filtering only faulty nodes if is_Faulty_Leader is set
-    else :
-        n = total_nodes
+    n = total_nodes if is_Faulty_Leader else [int(i) for i in list(twins.keys())] #Filtering only faulty nodes if is_Faulty_Leader is set
 
     flag = False
     for partition_set in partitions_list:
@@ -73,6 +73,9 @@ def scenario_generator(nodes, twins, n_partitions, n_rounds, partition_limit, pa
             if flag: break
         if flag: break
     
+    print(partition_leader_list_high_p)
+    print(partition_leader_list_low_p)
+
     if is_Deterministic:
         l = partition_leader_list_high_p + partition_leader_list_low_p
         partition_leader_list = l[:partition_leader_limit]
@@ -119,27 +122,36 @@ def create_scenario(partition_leader_list, seed, is_Deterministic, rounds, n_nod
     
     for round in range(rounds):
         introduce_failure = random.random()
-        if introduce_failure < 0.8:
-            t = get_tuple(is_Deterministic, partition_leader_list, Failure_Type.NONE, iterator)
+        if introduce_failure < 0.85:
+            t = get_tuple(is_Deterministic, partition_leader_list, Failure_Type.WILDCARD, iterator)
             rounds_dict[round] = {}
             rounds_dict[round]["leader"] = t[0]
             rounds_dict[round]["partitions"] = [t[1:]]
             iterator= (iterator+1)%len(partition_leader_list)
             
         elif introduce_failure < 0.9:
-            tuple1 = get_tuple(is_Deterministic, partition_leader_list, Failure_Type.NONE, iterator)
+            tuple1 = get_tuple(is_Deterministic, partition_leader_list, Failure_Type.WILDCARD, iterator)
             tuple2 = get_tuple(is_Deterministic, partition_leader_list, Failure_Type.PROPOSE, iterator)
             rounds_dict[round] = {}
             rounds_dict[round]["leader"] = tuple1[0]
             rounds_dict[round]["partitions"] = [tuple1[1:], tuple2[1:]]
             iterator = (iterator+1)%len(partition_leader_list)
             
-        else:
-            tuple1 = get_tuple(is_Deterministic, partition_leader_list, Failure_Type.NONE, iterator)
+        elif introduce_failure < 0.95:
+            tuple1 = get_tuple(is_Deterministic, partition_leader_list, Failure_Type.WILDCARD, iterator)
             tuple2 = get_tuple(is_Deterministic, partition_leader_list, Failure_Type.VOTE, iterator)
             rounds_dict[round] = {}
             rounds_dict[round]["leader"] = tuple1[0]
             rounds_dict[round]["partitions"] = [tuple1[1:], tuple2[1:]]
+            iterator=(iterator+1)%len(partition_leader_list)
+        
+        else :
+            tuple1 = get_tuple(is_Deterministic, partition_leader_list, Failure_Type.WILDCARD, iterator)
+            tuple2 = get_tuple(is_Deterministic, partition_leader_list, Failure_Type.PROPOSE, iterator)
+            tuple3 = get_tuple(is_Deterministic, partition_leader_list, Failure_Type.VOTE, iterator)
+            rounds_dict[round] = {}
+            rounds_dict[round]["leader"] = tuple1[0]
+            rounds_dict[round]["partitions"] = [tuple1[1:], tuple2[1:], tuple3[1:]]
             iterator=(iterator+1)%len(partition_leader_list)
     
     scenario["n_rounds"] = rounds
@@ -158,7 +170,7 @@ def get_tuple(is_Deterministic, partition_leader_dict, failure_type, iterator):
     return (item[0], item[1], failure_type)
 
 class Failure_Type(Enum):
-    NONE = 1
+    WILDCARD = 1
     PROPOSE = 2
     VOTE = 3
 
