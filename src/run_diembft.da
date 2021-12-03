@@ -2,26 +2,30 @@ import os
 import shutil
 import sys
 import json
+import time
 
 sys.path.append('../config')
 
 from client import Client
-from config import configs
 from cryptography import Cryptography
 from validator import ValidatorFI
+from logger_util import LOGGER
 from network_playground import NetworkPlayground
 
 class RunDiemBFT(process):
 
     def setup(config, config_id, scenario, scenario_id):
+        LOGGER.process_id = "Main"
+        LOGGER.filename = '../logs/' + LOGGER.process_id + ".log"
         self.nvalidators = int(config['nvalidators'])
         self.nclients = int(config['nclients'])
         self.nfaulty = int(config['nfaulty'])
         self.scenario = scenario
         self.execution_complete = False
+        LOGGER.log_action('Start' , 'Config-' + str(config_id) + ' Scenario-' + str(scenario_id))
 
     def run():
-
+        start = time.time()
         private_keys_validators = {}
         public_keys_validators = {}
         private_keys_clients = {}
@@ -69,6 +73,8 @@ class RunDiemBFT(process):
         output("Execution Over: ", scenario_id)
         send(('Done',), to=validators)
         send(('Done',), to=clients)
+        end = time.time()
+        LOGGER.log_action('End ' , 'Config-' + str(config_id) + ' Scenario-' + str(scenario_id) + ' Time Taken: ' + str(end-start) + 's')
         send(('Done',), to= nodeof(self))
 
     def receive(msg=('DoneFromNP', reason), from_=p):
@@ -114,6 +120,7 @@ def main():
         config['twin'].update(twin_pairs)
             
         for scenario in scenarios:
+            
             p = new(RunDiemBFT)
             setup(p, (config, config_id, scenario, scenario_id))
             start(p)
