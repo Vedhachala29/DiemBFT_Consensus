@@ -56,12 +56,12 @@ def generate_heuristic_partitions(num_partitions, nodes, twins, partition_limit,
 
     if is_Deterministic:
         partitions = gen_partitions(total_nodes, twins, num_partitions, f, partition_limit, True)
-        persist_to_file(partitions, file_path)
+        # persist_to_file(partitions, file_path)
         return partitions
        
     else :
         partitions = gen_partitions(total_nodes, twins, num_partitions, f, partition_limit, False)
-        persist_to_file(partitions, file_path)
+        # persist_to_file(partitions, file_path)
         return partitions
 
 def persist_to_file(partitions, file_path):
