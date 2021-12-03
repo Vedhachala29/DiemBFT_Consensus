@@ -78,6 +78,7 @@ class RunDiemBFT(process):
         send(('Done',), to= nodeof(self))
 
     def receive(msg=('DoneFromNP', reason), from_=p):
+        LOGGER.log_action('Execution Completed', 'Cause: '+ reason)
         output('Reason from Main: ', reason)
         self.execution_complete = True
 

@@ -35,8 +35,9 @@ class LeaderElection:
         # LOGGER.log("Leader election is Done successfully", None)
         # '''return validators[floor(round//2) mod |validators|] // Round-robin leader (two rounds per leader)'''
         # return self.replicas[((round)//2) % len(self.replicas)]
-        
-        leader_id = self.scenario['rounds'][str(round)]['leader']
+        leader_id = self.validator_id
+        if str(round) in self.scenario['rounds']:
+            leader_id = self.scenario['rounds'][str(round)]['leader']
         return self.replicas[leader_id]
 
     '''Procedure update leaders(qc)'''

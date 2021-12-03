@@ -34,7 +34,7 @@ class NetworkPlayground(process):
         output("Terminating Network playground")
 
     def receive(msg=('NetworkPlayground', source, round, msg, msgtype), from_=p):
-        output(str(source), " sending ", msgtypestr[msgtype], 'at round ', round)
+        # output(str(source), " sending ", msgtypestr[msgtype], 'at round ', round)
         LOGGER.log_event('Received ', msgtypestr[msgtype] , 'round: '+ str(round), source)
         destination = evaluate_destination(source, round, msgtype)
 
@@ -59,13 +59,17 @@ class NetworkPlayground(process):
         update_no_commit_pool(round)
         do_safety_check(source,txns)
         check_process_completion()
-        output('cp 4')
+        
         
 
     def evaluate_destination(source, round, msgtype):
         partition = []
         intended_destination = []
-        PLF_list = scenario['rounds'][str(round)]['partitions']
+
+        PLF_list = []
+        if str(round) in scenario['rounds']:
+            PLF_list = scenario['rounds'][str(round)]['partitions']
+        
         for partition_config in PLF_list:
             partition_sets  = partition_config[0]
             failtype = partition_config[1]
@@ -85,6 +89,13 @@ class NetworkPlayground(process):
         if msgtype in [MsgType.Proposal, MsgType.Timeout]:
             intended_destination = list(range(len(validators)))
         if msgtype == MsgType.Vote:
+            next_leader = source
+            if str(round+1) not in scenario['rounds']:
+                self.Process_Completed = True
+                send(('DoneFromNP','execution completed'), to=parent())
+                output("Already in last round, can't vote")
+                return
+                
             next_leader = scenario['rounds'][str(round+1)]['leader']
             intended_destination = [next_leader]
             if str(next_leader) in config['twin']:
@@ -151,7 +162,7 @@ class NetworkPlayground(process):
         if non_faulty_pendings_commits is False:
             LOGGER.log_action('Completed ', ' Commits Successful')
             self.Process_Completed = True
-            send(('DoneFromNP','Execution Completed'), to=parent())
+            send(('DoneFromNP','All commits Successful'), to=parent())
             return True
         else:
             return False

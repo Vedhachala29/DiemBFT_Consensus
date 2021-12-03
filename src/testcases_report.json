@@ -685,20 +685,20 @@
         {
             "n_replicas": 4,
             "n_twins": 1,
-            "max_rounds": 20,
+            "max_rounds": 10,
             "rounds": {
                 "0": {
-                    "leader": 0,
+                    "leader": 1,
                     "partitions": [
                         [
                             [
                                 [
                                     0,
-                                    1,
-                                    2,
                                     4
                                 ],
                                 [
+                                    1,
+                                    2,
                                     3
                                 ]
                             ],
@@ -714,11 +714,11 @@
                                 [
                                     0,
                                     1,
-                                    2,
+                                    3,
                                     4
                                 ],
                                 [
-                                    3
+                                    2
                                 ]
                             ],
                             "Failure_Type.WILDCARD"
@@ -726,7 +726,7 @@
                     ]
                 },
                 "2": {
-                    "leader": 2,
+                    "leader": 3,
                     "partitions": [
                         [
                             [
@@ -734,10 +734,10 @@
                                     0,
                                     1,
                                     2,
-                                    4
+                                    3
                                 ],
                                 [
-                                    3
+                                    4
                                 ]
                             ],
                             "Failure_Type.WILDCARD"
@@ -745,7 +745,7 @@
                     ]
                 },
                 "3": {
-                    "leader": 4,
+                    "leader": 1,
                     "partitions": [
                         [
                             [
@@ -760,35 +760,21 @@
                                 ]
                             ],
                             "Failure_Type.WILDCARD"
-                        ],
-                        [
-                            [
-                                [
-                                    0,
-                                    1,
-                                    2,
-                                    4
-                                ],
-                                [
-                                    3
-                                ]
-                            ],
-                            "Failure_Type.PROPOSE"
                         ]
                     ]
                 },
                 "4": {
-                    "leader": 0,
+                    "leader": 1,
                     "partitions": [
                         [
                             [
                                 [
                                     0,
-                                    1,
-                                    2
+                                    3
                                 ],
                                 [
-                                    3,
+                                    1,
+                                    2,
                                     4
                                 ]
                             ],
@@ -797,16 +783,16 @@
                     ]
                 },
                 "5": {
-                    "leader": 1,
+                    "leader": 2,
                     "partitions": [
                         [
                             [
                                 [
                                     0,
-                                    1,
-                                    2
+                                    1
                                 ],
                                 [
+                                    2,
                                     3,
                                     4
                                 ]
@@ -816,17 +802,17 @@
                     ]
                 },
                 "6": {
-                    "leader": 2,
+                    "leader": 1,
                     "partitions": [
                         [
                             [
                                 [
                                     0,
                                     1,
-                                    2
+                                    3
                                 ],
                                 [
-                                    3,
+                                    2,
                                     4
                                 ]
                             ],
@@ -835,37 +821,51 @@
                     ]
                 },
                 "7": {
-                    "leader": 0,
-                    "partitions": [
-                        [
-                            [
-                                [
-                                    0,
-                                    1,
-                                    3,
-                                    4
-                                ],
-                                [
-                                    2
-                                ]
-                            ],
-                            "Failure_Type.WILDCARD"
-                        ]
-                    ]
-                },
-                "8": {
                     "leader": 1,
                     "partitions": [
                         [
                             [
                                 [
                                     0,
+                                    3
+                                ],
+                                [
                                     1,
+                                    2,
+                                    4
+                                ]
+                            ],
+                            "Failure_Type.WILDCARD"
+                        ],
+                        [
+                            [
+                                [
+                                    0,
                                     3,
                                     4
                                 ],
                                 [
+                                    1,
                                     2
+                                ]
+                            ],
+                            "Failure_Type.VOTE"
+                        ]
+                    ]
+                },
+                "8": {
+                    "leader": 2,
+                    "partitions": [
+                        [
+                            [
+                                [
+                                    0,
+                                    4
+                                ],
+                                [
+                                    1,
+                                    2,
+                                    3
                                 ]
                             ],
                             "Failure_Type.WILDCARD"
@@ -874,224 +874,6 @@
                 },
                 "9": {
                     "leader": 3,
-                    "partitions": [
-                        [
-                            [
-                                [
-                                    0,
-                                    1,
-                                    3,
-                                    4
-                                ],
-                                [
-                                    2
-                                ]
-                            ],
-                            "Failure_Type.WILDCARD"
-                        ]
-                    ]
-                },
-                "10": {
-                    "leader": 4,
-                    "partitions": [
-                        [
-                            [
-                                [
-                                    0,
-                                    1,
-                                    3,
-                                    4
-                                ],
-                                [
-                                    2
-                                ]
-                            ],
-                            "Failure_Type.WILDCARD"
-                        ],
-                        [
-                            [
-                                [
-                                    0,
-                                    1,
-                                    3,
-                                    4
-                                ],
-                                [
-                                    2
-                                ]
-                            ],
-                            "Failure_Type.PROPOSE"
-                        ],
-                        [
-                            [
-                                [
-                                    0,
-                                    1,
-                                    3,
-                                    4
-                                ],
-                                [
-                                    2
-                                ]
-                            ],
-                            "Failure_Type.VOTE"
-                        ]
-                    ]
-                },
-                "11": {
-                    "leader": 0,
-                    "partitions": [
-                        [
-                            [
-                                [
-                                    0,
-                                    1,
-                                    3
-                                ],
-                                [
-                                    2,
-                                    4
-                                ]
-                            ],
-                            "Failure_Type.WILDCARD"
-                        ]
-                    ]
-                },
-                "12": {
-                    "leader": 1,
-                    "partitions": [
-                        [
-                            [
-                                [
-                                    0,
-                                    1,
-                                    3
-                                ],
-                                [
-                                    2,
-                                    4
-                                ]
-                            ],
-                            "Failure_Type.WILDCARD"
-                        ]
-                    ]
-                },
-                "13": {
-                    "leader": 3,
-                    "partitions": [
-                        [
-                            [
-                                [
-                                    0,
-                                    1,
-                                    3
-                                ],
-                                [
-                                    2,
-                                    4
-                                ]
-                            ],
-                            "Failure_Type.WILDCARD"
-                        ]
-                    ]
-                },
-                "14": {
-                    "leader": 0,
-                    "partitions": [
-                        [
-                            [
-                                [
-                                    0,
-                                    1,
-                                    4
-                                ],
-                                [
-                                    2,
-                                    3
-                                ]
-                            ],
-                            "Failure_Type.WILDCARD"
-                        ]
-                    ]
-                },
-                "15": {
-                    "leader": 1,
-                    "partitions": [
-                        [
-                            [
-                                [
-                                    0,
-                                    1,
-                                    4
-                                ],
-                                [
-                                    2,
-                                    3
-                                ]
-                            ],
-                            "Failure_Type.WILDCARD"
-                        ]
-                    ]
-                },
-                "16": {
-                    "leader": 4,
-                    "partitions": [
-                        [
-                            [
-                                [
-                                    0,
-                                    1,
-                                    4
-                                ],
-                                [
-                                    2,
-                                    3
-                                ]
-                            ],
-                            "Failure_Type.WILDCARD"
-                        ]
-                    ]
-                },
-                "17": {
-                    "leader": 2,
-                    "partitions": [
-                        [
-                            [
-                                [
-                                    0,
-                                    1
-                                ],
-                                [
-                                    2,
-                                    3,
-                                    4
-                                ]
-                            ],
-                            "Failure_Type.WILDCARD"
-                        ]
-                    ]
-                },
-                "18": {
-                    "leader": 3,
-                    "partitions": [
-                        [
-                            [
-                                [
-                                    0,
-                                    1
-                                ],
-                                [
-                                    2,
-                                    3,
-                                    4
-                                ]
-                            ],
-                            "Failure_Type.WILDCARD"
-                        ]
-                    ]
-                },
-                "19": {
-                    "leader": 4,
                     "partitions": [
                         [
                             [
@@ -1113,6 +895,216 @@
         }
     ],
     "case4" : [
-        
+        {
+            "n_replicas": 4,
+            "n_twins": 1,
+            "max_rounds": 10,
+            "rounds": {
+                "0": {
+                    "leader": 1,
+                    "partitions": [
+                        [
+                            [
+                                [
+                                    0,
+                                    4
+                                ],
+                                [
+                                    1,
+                                    2,
+                                    3
+                                ]
+                            ],
+                            "Failure_Type.WILDCARD"
+                        ]
+                    ]
+                },
+                "1": {
+                    "leader": 1,
+                    "partitions": [
+                        [
+                            [
+                                [
+                                    0,
+                                    1,
+                                    3,
+                                    4
+                                ],
+                                [
+                                    2
+                                ]
+                            ],
+                            "Failure_Type.WILDCARD"
+                        ]
+                    ]
+                },
+                "2": {
+                    "leader": 3,
+                    "partitions": [
+                        [
+                            [
+                                [
+                                    0,
+                                    1,
+                                    2,
+                                    3
+                                ],
+                                [
+                                    4
+                                ]
+                            ],
+                            "Failure_Type.WILDCARD"
+                        ]
+                    ]
+                },
+                "3": {
+                    "leader": 1,
+                    "partitions": [
+                        [
+                            [
+                                [
+                                    0,
+                                    1,
+                                    2,
+                                    4
+                                ],
+                                [
+                                    3
+                                ]
+                            ],
+                            "Failure_Type.WILDCARD"
+                        ]
+                    ]
+                },
+                "4": {
+                    "leader": 1,
+                    "partitions": [
+                        [
+                            [
+                                [
+                                    0,
+                                    3
+                                ],
+                                [
+                                    1,
+                                    2,
+                                    4
+                                ]
+                            ],
+                            "Failure_Type.WILDCARD"
+                        ]
+                    ]
+                },
+                "5": {
+                    "leader": 2,
+                    "partitions": [
+                        [
+                            [
+                                [
+                                    0,
+                                    1
+                                ],
+                                [
+                                    2,
+                                    3,
+                                    4
+                                ]
+                            ],
+                            "Failure_Type.WILDCARD"
+                        ]
+                    ]
+                },
+                "6": {
+                    "leader": 1,
+                    "partitions": [
+                        [
+                            [
+                                [
+                                    0,
+                                    1,
+                                    3
+                                ],
+                                [
+                                    2,
+                                    4
+                                ]
+                            ],
+                            "Failure_Type.WILDCARD"
+                        ]
+                    ]
+                },
+                "7": {
+                    "leader": 1,
+                    "partitions": [
+                        [
+                            [
+                                [
+                                    0,
+                                    3
+                                ],
+                                [
+                                    1,
+                                    2,
+                                    4
+                                ]
+                            ],
+                            "Failure_Type.WILDCARD"
+                        ],
+                        [
+                            [
+                                [
+                                    0,
+                                    3,
+                                    4
+                                ],
+                                [
+                                    1,
+                                    2
+                                ]
+                            ],
+                            "Failure_Type.VOTE"
+                        ]
+                    ]
+                },
+                "8": {
+                    "leader": 2,
+                    "partitions": [
+                        [
+                            [
+                                [
+                                    0,
+                                    4
+                                ],
+                                [
+                                    1,
+                                    2,
+                                    3
+                                ]
+                            ],
+                            "Failure_Type.WILDCARD"
+                        ]
+                    ]
+                },
+                "9": {
+                    "leader": 3,
+                    "partitions": [
+                        [
+                            [
+                                [
+                                    0,
+                                    1
+                                ],
+                                [
+                                    2,
+                                    3,
+                                    4
+                                ]
+                            ],
+                            "Failure_Type.WILDCARD"
+                        ]
+                    ]
+                }
+            }
+        }
     ]
  }

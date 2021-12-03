@@ -247,12 +247,12 @@ class Validator (process):
         if signature_verified is not None:
             LOGGER.log_action("Verified TimeoutMsg signature", True)
 
-            if timeout_msg.tmo_info.high_qc and compare_qc_with_max_round(timeout_msg.tmo_info.high_qc, self.blocktree.high_qc) > 0:
-                # output("Proposal msg block qc ", todict(proposal_msg.block.qc))
-                self.syncup_inprogress = True
-                send(('SyncRequest', self.blocktree.high_qc), to=source)
-                await(self.syncup_inprogress == False)
-                output('sync check ', compare_qc_with_max_round(timeout_msg.tmo_info.high_qc, self.blocktree.high_qc))
+            # if timeout_msg.tmo_info.high_qc and compare_qc_with_max_round(timeout_msg.tmo_info.high_qc, self.blocktree.high_qc) > 0:
+            #     # output("Proposal msg block qc ", todict(proposal_msg.block.qc))
+            #     self.syncup_inprogress = True
+            #     send(('SyncRequest', self.blocktree.high_qc), to=source)
+            #     await(self.syncup_inprogress == False)
+            #     output('sync check ', compare_qc_with_max_round(timeout_msg.tmo_info.high_qc, self.blocktree.high_qc))
             
 
             '''process certificate qc(M.tmo info.high qc)
