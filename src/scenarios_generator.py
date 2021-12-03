@@ -26,10 +26,7 @@ def scenario_generator(nodes, twins, n_partitions, n_rounds, partition_limit, pa
     partition_leader_list = []
     count = 0
 
-    if is_Faulty_Leader: 
-        n = [int(i) for i in list(twins.keys())]                      #Filtering only faulty nodes if is_Faulty_Leader is set
-    else :
-        n = total_nodes
+    n = total_nodes if is_Faulty_Leader else [int(i) for i in list(twins.keys())] #Filtering only faulty nodes if is_Faulty_Leader is set      
 
     flag = False
     for partition_set in partitions_list:
@@ -75,6 +72,9 @@ def scenario_generator(nodes, twins, n_partitions, n_rounds, partition_limit, pa
                 
             if flag: break
         if flag: break
+    
+    print(partition_leader_list_high_p)
+    print(partition_leader_list_low_p)
     
     if is_Deterministic:
         l = partition_leader_list_high_p + partition_leader_list_low_p
