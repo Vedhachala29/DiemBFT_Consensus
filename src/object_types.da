@@ -20,6 +20,11 @@ class FailType(Enum):
     Delay = 2
     SetAttr = 3
 
+class Failure_Type(Enum):
+    WILDCARD = 1
+    PROPOSE = 2
+    VOTE = 3
+
 
 Failure = namedtuple('Failure', ['src', 'dest', 'msg_type', 'round',
                                  'prob', 'fail_type', 'val', 'attr'])

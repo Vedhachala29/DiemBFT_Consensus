@@ -19,6 +19,7 @@ def scenario_generator(nodes, twins, n_partitions, n_rounds, partition_limit, pa
     print("Length of partition_list : " , len(partitions_list), "\n")
     for i in partitions_list:
         print(i)
+    
             
     #Step 2
     partition_leader_list_high_p = []
@@ -75,7 +76,7 @@ def scenario_generator(nodes, twins, n_partitions, n_rounds, partition_limit, pa
     
     print(partition_leader_list_high_p)
     print(partition_leader_list_low_p)
-
+    
     if is_Deterministic:
         l = partition_leader_list_high_p + partition_leader_list_low_p
         partition_leader_list = l[:partition_leader_limit]
@@ -87,7 +88,8 @@ def scenario_generator(nodes, twins, n_partitions, n_rounds, partition_limit, pa
         
 
     print("Length of partition_leader_list : " , len(partition_leader_list), "\n")
-    persist_to_file(partition_leader_list, f"./partition_leader_list.txt")
+    for i in partition_leader_list:
+        print(i)
     
     #Step 3 and #Step 4 combined
     num_scenarios=0
@@ -196,4 +198,17 @@ def is_valid(scenario, rounds, n_twins, threshold):
         r+=3
     return t>=threshold
 
-scenario_generator([0,1,2,3], {0:4}, 2, 20, 30, 100, 500, 42, False, False, f'./scenarios.json')
+# scenario_generator([0,1,2,3], {0:4}, 2, 20, 30, 100, 500, 42, False, False, f'./scenarios.json')
+def main():
+    c = open('../config/configs.json')
+    configs = json.load(c)
+    os.makedirs('../scenarios/', exist_ok=True) 
+    for config in configs:
+        config_id = config['id']
+        nodes = [i for i in range(config['nvalidators'])]
+        scenario_generator(nodes, config['twin'], config['n_partitions'], config['n_rounds'], config['partition_limit'], 
+                config['partition_leader_limit'], config['max_testcases'], config['seed'], config['is_Faulty_Leader'], 
+                config['is_Deterministic'], f'../scenarios/config_{config_id}.json')
+
+if __name__ == '__main__':
+    main()
