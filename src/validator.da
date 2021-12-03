@@ -152,12 +152,13 @@ class Validator (process):
 
         if signature_verified is not None:
             LOGGER.log_action("Verified ProposalMsg signature", True)
-            
+
             # Send syncup request if it's out of sync.
              #proposal_msg.block.qc.vote_info.round > self.blocktree.high_qc.vote_info.round
             if  proposal_msg.block.qc and compare_qc_with_max_round(proposal_msg.block.qc, self.blocktree.high_qc) > 1:
                 output('starting sync up for:', self.validator_id, 'current round: ', self.pacemaker.current_round)
                 self.syncup_inprogress = True
+                LOGGER.log_event('Sent', 'SyncRequest', self.blocktree.high_qc , source)
                 send(('SyncRequest', self.blocktree.high_qc), to=source)
                 await(self.syncup_inprogress == False)
                 output('sync check ', compare_qc_with_max_round(proposal_msg.block.qc, self.blocktree.high_qc) , ' current round: ', self.pacemaker.current_round)
@@ -299,30 +300,17 @@ class Validator (process):
 
     
     def receive(msg=('SyncRequest', high_qc), from_=p):
-        # LOGGER.log("Received request for sync up")
-        # output("Received request for sync up from ", p)
-
-        # output("Received÷ high_qc ", todict(high_qc))
-        # output("current_block ", todict(current_block))
+        LOGGER.log_event('Received', 'SyncRequest', high_qc , p)
         pending_blocks = []
         
         for blockid, blocki in self.blocktree.id_block.items():
             if bool_compare_qc_with_max_round(blocki.qc, high_qc):
                 pending_blocks.append(blocki)
-
-        # while current_block and current_block.qc and compare_qc_with_max_round(current_block.qc, high_qc):
-        #     current_block = self.blocktree.id_block[current_block.qc.vote_info.id]
-        #     if current_block:
-        #         pending_blocks.append(current_block)
-        
-        # if current_block and :
-        #     pending_blocks.append(current_block)
-        
-        # output("Sending sync response to ", pending_blocks[::-1], p)
+        LOGGER.log_event('Sent', 'SyncRequest', str(len(pending_blocks)) + ' Blocks' , p)
         send(('SyncResponse', pending_blocks), to=p)
     
     def receive(msg=('SyncResponse', blocks_list), from_=p):
-        # LOGGER.log("Received response for sync up")
+        LOGGER.log_event('Received', 'SyncResponse', str(len(blocks_list)) + ' Blocks' , p)
         output("At validator:",self.validator_id, ": Received response for sync up", len(blocks_list))
 
         if len(blocks_list) == 0:
