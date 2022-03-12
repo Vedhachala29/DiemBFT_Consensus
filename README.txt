@@ -11,11 +11,6 @@ OS ProductVersion: 11.5.2
 OS BuildVersion: 20G95
 Type of Host : Personal Laptop
 
-BUGS and LIMITATIONS :
-
-1. Syncup might not work properly in all cases?
-2. Timeout issue?
-
 
 MAIN FILES:
 
@@ -38,12 +33,4 @@ Python set comprehension : 4
 DistAlgo quantifications : 2 await(each()) quantifications used in run.da
 DistAlgo await statements : 4 await statements
 Number of receive handlers : 2 extra receive handlers used for validator's reception of syncup requests and responses
-
-
-CONTRIBUTIONS:
-
-Vedhachala Tirupattur Shanmugam : Scenario executor, integration with DiemBFT, bugfix in DiemBFT
-Sai Bhargav Varanasi : Scenario generation, bugfix in DiemBFT
-Sujay Lakkimsetti : Scenario generation
-
 
