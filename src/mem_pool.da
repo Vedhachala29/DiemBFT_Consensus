@@ -1,0 +1,63 @@
+from logger_util import LOGGER
+
+
+class MemPool:
+
+    def __init__(self, validator_id):
+        self.pending_txns = dict()
+        self.validator_id = validator_id
+        self.proposed_txns = set()
+
+    def add_transaction(self, txn):
+        LOGGER.log('MemPool: add_transaction', txn)
+        # Don't add client requests if already present
+        if (txn['req_id'] not in self.pending_txns):
+            self.pending_txns[txn['req_id']] = txn
+
+    # Get the length of pending transactions
+    def peek_pool(self):
+        LOGGER.log('MemPool: peek_pool', None)
+        length = len(self.pending_txns.keys())
+        LOGGER.log('MemPool: peek_pool: returns',
+                   length, self.pending_txns.keys())
+        return length
+
+    '''Function get transactions()'''
+
+    def get_transactions(self):
+        LOGGER.log('MemPool: get_transactions', None)
+        # send_txns = list(self.pending_txns.values())
+        # self.pending_txns.clear()
+        if len(self.pending_txns) == 0:
+            LOGGER.log('MemPool: get_transactions: returns', [])
+            return []
+        # Get a single transaction
+        send_txns = []
+        keys = list(self.pending_txns.keys())
+        for key in keys:
+            if key in self.proposed_txns:
+                continue
+            else:
+                send_txns = [self.pending_txns[key]]
+                break
+        # del self.pending_txns[keys[0]]
+        LOGGER.log('MemPool: get_transactions: returns', send_txns)
+        return send_txns
+
+    def validate_and_remove_transactions(self, txns):
+        LOGGER.log('MemPool: validate_and_remove_transactions', txns)
+        to_remove = []
+        for txn in txns:
+            if txn['req_id'] in self.pending_txns:
+                to_remove.append(txn['req_id'])
+            else:
+                LOGGER.log(
+                    'MemPool: validate_and_remove_transactions: returns', False)
+                return False
+
+        for req_id in to_remove:
+            del self.pending_txns[req_id]
+            if req_id in self.proposed_txns:
+                self.proposed_txns.remove(req_id)
+        LOGGER.log('MemPool: validate_and_remove_transactions: returns', True)
+        return True

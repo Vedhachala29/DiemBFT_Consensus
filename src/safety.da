@@ -1,0 +1,197 @@
+from cryptography import Cryptography
+from logger_util import LOGGER
+from object_types import LedgerCommitInfo, TimeoutInfo, VoteInfo, VoteMsg
+
+
+class Safety:
+
+    def __init__(self, validator_id, replicas, ledger, blocktree):
+        '''private key; // Own private key
+        public keys; // Public keys of all validators
+        highest vote round; // initially 0
+        highest qc round;'''
+        self.__highest_vote_round = 0
+        self.__highest_qc_round = 0
+        self.validator_id = validator_id
+        self.validator = replicas[validator_id]
+        self.ledger = ledger
+        self.blocktree = blocktree
+
+    '''Procedure increase highest vote round(round)'''
+
+    def __increase_highest_vote_round(self, round):
+        LOGGER.log("Safety: __increase_highest_vote_round", round)
+        '''// commit not to vote in rounds lower than round
+        highest vote round ← max{round, highest vote round}'''
+        self.__highest_vote_round = max(round, self.__highest_vote_round)
+        LOGGER.log("Safety: __increase_highest_vote_round returns",
+                   self.__highest_vote_round)
+
+    '''Procedure update highest qc round(qc round)'''
+
+    def __update_highest_qc_round(self, qc_round):
+        LOGGER.log("Safety: __update_highest_qc_round", qc_round)
+        '''highest qc round ← max{qc round, highest qc round}'''
+        self.__highest_qc_round = max(qc_round, self.__highest_qc_round)
+        LOGGER.log("Safety: __update_highest_qc_round returns",
+                   self.__highest_qc_round)
+
+    '''Function consecutive(block round, round)'''
+
+    def __consecutive(self, block_round, round):
+        LOGGER.log("Safety: __consecutive", block_round, round)
+        LOGGER.log("Safety: __consecutive returns", round + 1 == block_round)
+        '''return round + 1 = block round'''
+        return round + 1 == block_round
+
+    '''Function safe to extend(block round, qc round, tc)'''
+
+    def __safe_to_extend(self, block_round, qc_round, tc):
+        if tc == None:
+            tc_round = 0
+        else:
+            tc_round = tc.round
+        LOGGER.log("Safety: __safe_to_extend", block_round, qc_round, tc)
+        LOGGER.log("Safety: __safe_to_extend returns", self.__consecutive(
+            block_round, tc_round) and qc_round >= max(tc.tmo_high_qc_rounds))
+        '''return consecutive(block round, tc.round) ∧ qc round ≥ max{tc.tmo high qc rounds}'''
+        return self.__consecutive(block_round, tc_round) and qc_round >= max(tc.tmo_high_qc_rounds)
+
+    '''Function safe to vote(block round, qc round, tc)'''
+
+    def __safe_to_vote(self, block_round, qc_round, tc):
+        LOGGER.log("Safety: __safe_to_vote", block_round, qc_round, tc)
+        '''if block round ≤ max{highest vote round, qc round} then'''
+        if block_round <= max(self.__highest_vote_round, qc_round):
+            LOGGER.log("Safety: __safe_to_vote returns1", False)
+            '''// 1. must vote in monotonically increasing rounds
+            // 2. must extend a smaller round
+            return false'''
+            return False
+        LOGGER.log("Safety: __safe_to_vote returns2", self.__consecutive(
+            block_round, qc_round) or self.__safe_to_extend(block_round, qc_round, tc))
+        '''return consecutive(block round, qc round) ∨ safe to extend(block round, qc round, tc)'''
+        return self.__consecutive(block_round, qc_round) or self.__safe_to_extend(block_round, qc_round, tc)
+
+    '''Function safe to timeout(round, qc round, tc)'''
+
+    def __safe_to_timeout(self, round, qc_round, tc):
+        if tc == None:
+            tc_round = 0
+        else:
+            tc_round = tc.round
+        LOGGER.log("Safety: __safe_to_timeout", round, qc_round, tc)
+        '''if qc round < highest qc round ∨ round ≤ max{highest vote round − 1, qc round} then'''
+        if (qc_round < self.__highest_qc_round) or (round <= max(self.__highest_vote_round - 1, qc_round)):
+            LOGGER.log("Safety: __safe_to_timeout returns1", False)
+            '''// respect highest qc round and don’t timeout in a past round
+            return false'''
+            return False
+        LOGGER.log("Safety: __safe_to_timeout returns2", self.__consecutive(
+            round, qc_round) or self.__consecutive(round, tc_round))
+        '''// qc or tc must allow entering the round to timeout
+        return consecutive(round, qc round) ∨ consecutive(round, tc.round)'''
+        return self.__consecutive(round, qc_round) or self.__consecutive(round, tc_round)
+
+    '''Function commit state id candidate(block round, qc)'''
+
+    def __commit_state_id_candidate(self, block_round, qc_round, qc_block_id):
+        LOGGER.log("Safety: __commit_state_id_candidate",
+                   block_round, qc_round, qc_block_id)
+        '''// find the committed id in case a qc is formed in the vote round
+        if consecutive(block round, qc.vote info.round) then'''
+        if self.__consecutive(block_round, qc_round):
+            LOGGER.log("Safety: __commit_state_id_candidate returns1",
+                       self.ledger.pending_state(qc_block_id))
+            '''return Ledger.pending state(qc.id)'''
+            return self.ledger.pending_state(qc_block_id)
+        else:
+            LOGGER.log("Safety: __commit_state_id_candidate returns2", None)
+            '''else
+            return ⊥'''
+            return None
+
+    def set_highest_vote_round(self, value):
+        self.__highest_vote_round = value
+
+    '''Function make vote(b, last tc)'''
+    #Creates vote message containing vote_info, and ledger_commit_info if valid
+    def make_vote(self, block, last_tc):
+        LOGGER.log('Safety: make_vote', block, last_tc)
+        if block.qc is None:
+            qc_round = 0
+            qc_block_id = "0"
+        else:
+            '''qc round ← b.qc.vote info.round'''
+            qc_round = block.qc.vote_info.round
+            qc_block_id = block.qc.vote_info.id
+        '''if valid signatures(b, last tc) ∧ safe to vote(b.round, qc round, last tc) then'''
+        if Cryptography.valid_signatures(last_tc) and Cryptography.valid_signatures(block) and self.__safe_to_vote(block.round, qc_round, last_tc):
+            '''update highest qc round(qc round) // Protect qc round'''
+            self.__update_highest_qc_round(qc_round)
+            '''increase highest vote round(b.round) // Don’t vote again in this (or lower) round'''
+            self.__increase_highest_vote_round(block.round)
+            '''// VoteInfo carries the potential QC info with ids and rounds of the parent QC
+            vote info ←VoteInfoh
+            (id, round) ← (b.id, b.round),
+            (parent id, parent round) ← (b.qc.vote info.id, qc round)
+            exec state id ← Ledger.pending state(b.id) i'''
+            vote_info = VoteInfo(
+                block.id,
+                block.round,
+                qc_block_id,
+                qc_round,
+                self.ledger.pending_state(block.id)
+            )
+            '''ledger commit info ←LedgerCommitInfo h
+            commit state id ← commit state id candidate(b.round, b.qc),
+            vote info hash ← hash(vote info) i'''
+            ledger_commit_info = LedgerCommitInfo(
+                self.__commit_state_id_candidate(
+                    block.round, qc_round, qc_block_id),
+                Cryptography.hash(vote_info)
+            )
+            '''return VoteMsghvote info, ledger commit info, Block-Tree.high commit qci'''
+            vote_msg = VoteMsg(
+                vote_info,
+                ledger_commit_info,
+                self.blocktree.high_commit_qc,
+                self.validator_id
+            )
+            LOGGER.log('Safety: make_vote: returns', vote_msg)
+            return vote_msg
+        LOGGER.log('Safety: make_vote: returns', None)
+        '''return ⊥'''
+        return None
+
+    '''Function make timeout(round, high qc, last tc)'''
+    #Verify signatures and tmo_signatures in QC & TC, and Create appropriate TimeoutInfo object 
+    def make_timeout(self, round, high_qc, last_tc):
+        LOGGER.log('Safety: make_timeout', round, high_qc, last_tc)
+        if high_qc is None:
+            qc_round = 0
+        else:
+            '''qc round ← high qc.vote info.round;'''
+            qc_round = high_qc.vote_info.round
+        '''if valid signatures(high qc, last tc) ∧ safe to timeout(round, qc round, last tc) then'''
+        if Cryptography.valid_signatures(high_qc) and Cryptography.valid_signatures(last_tc) and self.__safe_to_timeout(round, qc_round, last_tc):
+            '''increase highest vote round(round) // Stop voting for round'''
+            self.__increase_highest_vote_round(round)
+            '''return TimeoutInfohround, high qci'''
+            tmo_info = TimeoutInfo(
+                round,
+                high_qc,
+                self.validator_id
+            )
+            LOGGER.log('Safety: make_timeout: returns1', tmo_info)
+            return tmo_info
+        LOGGER.log('Safety: make_timeout: returns2', None)
+        '''return ⊥'''
+        return None
+    
+    def update_safety_counters(self, block):
+        if Cryptography.valid_signatures(block):
+            '''update highest qc round(qc round) // Protect qc round'''
+            self.__update_highest_qc_round(block.qc.vote_info.round)
+            '''increase highest vote round(b.round) // Don’t vote again in this (or lower) round'''
+            self.__increase_highest_vote_round(block.round)

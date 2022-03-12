@@ -1,0 +1,129 @@
+import os
+import shutil
+import sys
+import json
+import time
+
+sys.path.append('../config')
+
+from client import Client
+from config import configs
+from cryptography import Cryptography
+from validator import ValidatorFI
+from logger_util import LOGGER
+from network_playground import NetworkPlayground
+
+class RunDiemBFT(process):
+
+    def setup(config, config_id, scenario, scenario_id):
+        LOGGER.process_id = "Main"
+        LOGGER.filename = '../logs/' + LOGGER.process_id + ".log"
+        self.nvalidators = int(config['nvalidators'])
+        self.nclients = int(config['nclients'])
+        self.nfaulty = int(config['nfaulty'])
+        self.scenario = scenario
+        self.execution_complete = False
+        LOGGER.log_action('Start' , 'Config-' + str(config_id) + ' Scenario-' + str(scenario_id))
+
+    def run():
+        start = time.time()
+        private_keys_validators = {}
+        public_keys_validators = {}
+        private_keys_clients = {}
+        public_keys_clients = {}
+
+        os.makedirs('../logs/config' + str(config_id) + '/scenario' + str(scenario_id))
+        os.makedirs('../ledgers/config' + str(config_id) + '/scenario' + str(scenario_id))
+
+        validators = list(new(ValidatorFI, num=(nvalidators+nfaulty)))
+        clients = list(new(Client, num=nclients))
+        NP = new(NetworkPlayground)
+        setup(NP, (config, config_id, scenario,scenario_id, validators))
+
+        for i in range(nvalidators+nfaulty):
+            v = validators[i]
+            if v in private_keys_validators:
+                continue
+            private_key, public_key = Cryptography.generate_key()
+            private_keys_validators[v] = private_key
+            public_keys_validators[v] = public_key
+            if str(i) in config['twin']:
+                twin_id = config['twin'][str(i)]
+                t = validators[twin_id]
+                private_keys_validators[t] = private_key
+                public_keys_validators[t] = public_key
+
+        for c in clients:
+            private_key, public_key = Cryptography.generate_key()
+            private_keys_clients[c] = private_key
+            public_keys_clients[c] = public_key
+
+        for i, v in enumerate(validators):
+            setup({v}, (config, config_id, i, validators, clients,
+                        private_keys_validators[v], public_keys_validators, public_keys_clients, scenario,scenario_id, NP))
+
+        for i, c in enumerate(clients):
+            setup({c}, (config, config_id, i, validators,
+                        private_keys_clients[c], public_keys_validators,scenario, scenario_id))
+
+        start(NP)
+        start(validators)
+        start(clients)
+
+        await(self.execution_complete == True)
+        output("Execution Over: ", scenario_id)
+        send(('Done',), to=validators)
+        end = time.time()
+        LOGGER.log_action('End ' , 'Config-' + str(config_id) + ' Scenario-' + str(scenario_id) + ' Time Taken: ' + str(end-start) + 's')
+        send(('Done',), to= nodeof(self))
+
+    def receive(msg=('DoneFromNP', reason), from_=p):
+        output('Reason from Main: ', reason)
+        self.execution_complete = True
+
+
+
+def is_config_valid(config):
+    if int(config['nvalidators']) < (3 * int(config['nfaulty']) + 1):
+        print(
+            "Number of validators should be more than thrice of number of faulty validators.")
+        return False
+    if (int(config['nfaulty']) > int(config['exclude_size'])) or (int(config['exclude_size']) > 2 * int(config['nfaulty'])):
+        print(
+            "Exlude size should be between nfaulty and 2*nfaulty")
+        return False
+    return True
+
+
+def main():
+    config(clock="Lamport", channel="fifo")
+    if os.path.exists('../logs/') and os.path.isdir('../logs/'):
+        shutil.rmtree('../logs/')
+
+    if os.path.exists('../ledgers/') and os.path.isdir('../ledgers/'):
+        shutil.rmtree('../ledgers/')
+    
+    c = open('../config/configs.json')
+    configs = json.load(c)
+    for config in configs:
+        config_id = config['id']
+        os.makedirs('../logs/config' + str(config_id))
+        os.makedirs('../ledgers/config' + str(config_id))
+        f = open('../scenarios/config_' + str(config['id']) + '.json')
+        scenarios = json.load(f)
+        scenario_id = 0
+
+        twin_pairs = dict()
+        for twin in config['twin']:
+            t = config['twin'][twin]
+            twin_pairs[str(t)] = twin
+        config['twin'].update(twin_pairs)
+            
+        for scenario in scenarios:
+            
+            p = new(RunDiemBFT)
+            setup(p, (config, config_id, scenario, scenario_id))
+            start(p)
+            scenario_id += 1
+            await(received(('Done',), from_=nodeof(self)))  
+

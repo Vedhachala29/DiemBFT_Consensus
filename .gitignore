@@ -1,8 +1,9 @@
 _pycache_/
 *.py[cod]
-ledger*.txt
-log*.txt
-client*.log
-validator*.log
+ledgers/
+logs/
 .DS_Store
-runner.log
+scenarios/
+config/
+src/partition_leader_list.txt
+src/partitions.txt

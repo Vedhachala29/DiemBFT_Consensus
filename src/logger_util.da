@@ -1,0 +1,74 @@
+import datetime
+
+from utils import todict
+
+
+class LOGGER:
+
+    process_id = ""
+    replicas = []
+    clients = []
+    filename = ""
+
+    def log_event(event, msg_type, msg, proc=None):
+        other_proc = ''
+        if proc is None:
+            pass
+        elif type(proc) == set or type(proc) == list:
+            other_proc = "ALL validators"
+        elif proc in LOGGER.replicas:
+            other_proc = "validator_" + str(LOGGER.replicas.index(proc))
+        elif proc in LOGGER.clients:
+            other_proc = "client_" + str(LOGGER.clients.index(proc))
+        else:
+            # other_proc = "parent_process"
+            other_proc = proc
+
+        if msg != None and hasattr(msg, '__dict__'):
+            msg = todict(msg)
+        to_from = "To:"
+        if event.lower() == 'sent':
+            to_from = "To:"
+        elif event.lower() == 'received':
+            to_from = "From:"
+
+        f = open(LOGGER.filename, 'a+')
+        print(
+            "Timestamp:", datetime.datetime.now(), "|",
+            "ProcessId:", LOGGER.process_id, "|",
+            "Event:", event, "|",
+            "MsgType:", msg_type, "|",
+            to_from, other_proc, "|",
+            "Msg:", msg,
+            file=f
+        )
+        f.close()
+
+    def log_action(action, obj):
+        if obj != None and hasattr(obj, '__dict__'):
+            obj = todict(obj)
+
+        f = open(LOGGER.filename, 'a+')
+        print(
+            "Timestamp:", datetime.datetime.now(), "|",
+            "ProcessId:", LOGGER.process_id, "|",
+            "Action:", action, "|",
+            "Object:", obj, "|",
+            file=f
+        )
+        f.close()
+
+    def log(funcname, *params): 
+        pass
+        # timestamp = datetime.datetime.now()
+        # f = open(LOGGER.filename, 'a+')
+        # p_list = []
+        # for p in params:
+        #     if p != None and hasattr(p, '__dict__'):
+        #         p = p.__dict__
+        #     p_list.append(p)
+
+        # print(LOGGER.process_id,
+        #       funcname, p_list, file=f)
+        # f.close()
+
